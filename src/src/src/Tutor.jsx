@@ -1,6 +1,9 @@
-import { useState } from "react";
 
-export default function Tutor() {
+
+import { useState } from "react";
+import { ArrowRight, Brain, Send, BookOpen } from "lucide-react";
+
+export default function Tutor({ onBack }) {
   const [subject, setSubject] = useState("");
   const [topic, setTopic] = useState("");
   const [question, setQuestion] = useState("");
@@ -14,32 +17,89 @@ export default function Tutor() {
     "Internal Medicine",
     "Surgery",
     "Pediatrics",
+    "Ophthalmology",
+    "ENT",
     "Other",
   ];
 
   return (
-    <div style={{
-      minHeight: "100vh",
-      background: "#f5f7fb",
-      padding: "30px",
-      direction: "rtl",
-      fontFamily: "Arial, sans-serif"
-    }}>
-      <div style={{ maxWidth: "850px", margin: "auto" }}>
-        <h1 style={{ color: "#173b57" }}>MedMind AI Tutor 🩺</h1>
-        <p style={{ color: "#64748b" }}>
-          Your personal medical learning assistant
-        </p>
+    <div
+      dir="rtl"
+      style={{
+        minHeight: "100vh",
+        background: "#F6F9FC",
+        color: "#172B4D",
+        fontFamily: "Cairo, sans-serif",
+        padding: "25px 16px",
+      }}
+    >
+      <div style={{ maxWidth: 900, margin: "auto" }}>
 
-        <div style={{
-          background: "white",
-          padding: "25px",
-          borderRadius: "16px",
-          marginTop: "25px"
-        }}>
-          <h2>ابدأ رحلتك في الفهم</h2>
+        <button
+          onClick={onBack}
+          style={{
+            display: "flex",
+            alignItems: "center",
+            gap: 8,
+            border: "1px solid #E5EAF0",
+            background: "white",
+            color: "#087E78",
+            borderRadius: 10,
+            padding: "10px 16px",
+            cursor: "pointer",
+            fontFamily: "inherit",
+            fontWeight: 700,
+          }}
+        >
+          <ArrowRight size={18} />
+          العودة إلى الرئيسية
+        </button>
 
-          <label>اختر المادة</label>
+        <section
+          style={{
+            marginTop: 25,
+            background: "linear-gradient(120deg, #087E78, #075B63)",
+            color: "white",
+            borderRadius: 22,
+            padding: "30px 25px",
+          }}
+        >
+          <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
+            <Brain size={38} />
+            <div>
+              <h1 style={{ margin: 0, fontSize: 26 }}>
+                المساعد الطبي الذكي
+              </h1>
+              <p style={{ margin: "7px 0 0", color: "#D9F3EF" }}>
+                Medical AI Tutor
+              </p>
+            </div>
+          </div>
+
+          <p style={{ lineHeight: 2, color: "#E0F2F1", marginBottom: 0 }}>
+            اسأل، افهم، وتعلّم الطب بطريقة تناسب مستواك.
+          </p>
+        </section>
+
+        <section
+          style={{
+            background: "white",
+            border: "1px solid #E5EAF0",
+            borderRadius: 18,
+            padding: 25,
+            marginTop: 22,
+          }}
+        >
+          <h2 style={{ fontSize: 21, marginTop: 0 }}>
+            <BookOpen
+              size={21}
+              style={{ verticalAlign: "middle", marginLeft: 8 }}
+            />
+            ابدأ سؤالك
+          </h2>
+
+          <label style={labelStyle}>اختر المادة الطبية</label>
+
           <select
             value={subject}
             onChange={(e) => setSubject(e.target.value)}
@@ -47,11 +107,14 @@ export default function Tutor() {
           >
             <option value="">اختر المادة...</option>
             {subjects.map((item) => (
-              <option key={item} value={item}>{item}</option>
+              <option key={item} value={item}>
+                {item}
+              </option>
             ))}
           </select>
 
-          <label>الموضوع (اختياري)</label>
+          <label style={labelStyle}>الموضوع (اختياري)</label>
+
           <input
             value={topic}
             onChange={(e) => setTopic(e.target.value)}
@@ -59,44 +122,77 @@ export default function Tutor() {
             style={fieldStyle}
           />
 
-          <label>اكتب سؤالك الطبي</label>
+          <label style={labelStyle}>اكتب سؤالك</label>
+
           <textarea
             value={question}
             onChange={(e) => setQuestion(e.target.value)}
-            placeholder="اشرح لي الموضوع أو اسأل عن أي نقطة مش واضحة..."
+            placeholder="اشرح لي الموضوع أو اسأل عن نقطة مش واضحة..."
             rows={5}
-            style={fieldStyle}
+            style={{ ...fieldStyle, resize: "vertical" }}
           />
 
           <button
-            onClick={() => alert("واجهة المساعد جاهزة، وسنربط الذكاء الاصطناعي في الخطوة القادمة.")}
+            onClick={() =>
+              alert(
+                "واجهة المساعد جاهزة! سنربط الذكاء الاصطناعي في المرحلة القادمة."
+              )
+            }
+            disabled={!question.trim()}
             style={{
-              background: "#176b87",
-              color: "white",
-              padding: "14px 25px",
-              border: "none",
-              borderRadius: "10px",
-              cursor: "pointer",
               width: "100%",
-              fontSize: "16px",
-              marginTop: "10px"
+              padding: 15,
+              border: 0,
+              borderRadius: 11,
+              background: question.trim() ? "#087E78" : "#A7C7C3",
+              color: "white",
+              fontSize: 16,
+              fontWeight: 800,
+              fontFamily: "inherit",
+              cursor: question.trim() ? "pointer" : "not-allowed",
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "center",
+              gap: 9,
             }}
           >
+            <Send size={18} />
             ابدأ المحادثة
           </button>
-        </div>
+
+          <p
+            style={{
+              fontSize: 12,
+              color: "#94A3B8",
+              textAlign: "center",
+              marginBottom: 0,
+            }}
+          >
+            المساعد ما زال في مرحلة التطوير، ولا يقدم تشخيصًا طبيًا.
+          </p>
+        </section>
+
       </div>
     </div>
   );
 }
 
+const labelStyle = {
+  display: "block",
+  marginBottom: 8,
+  fontWeight: 700,
+  fontSize: 14,
+};
+
 const fieldStyle = {
   display: "block",
   width: "100%",
-  padding: "13px",
-  margin: "10px 0 20px",
-  border: "1px solid #d5dce5",
-  borderRadius: "8px",
-  fontSize: "15px",
-  boxSizing: "border-box"
+  padding: 13,
+  marginBottom: 20,
+  border: "1px solid #D5DCE5",
+  borderRadius: 9,
+  fontSize: 15,
+  fontFamily: "inherit",
+  background: "white",
+  boxSizing: "border-box",
 };
