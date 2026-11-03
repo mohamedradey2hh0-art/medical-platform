@@ -147,8 +147,6 @@ export default function Tutor({ onBack }) {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
   const [selectedImage, setSelectedImage] = useState(null);
-
-  // Ask MedMind selection state
   const [textSelection, setTextSelection] = useState(null);
 
   const questionStartRef = useRef(null);
@@ -168,7 +166,7 @@ export default function Tutor({ onBack }) {
     }, 200);
   }
 
-  // Detect selected text inside MedMind's answers
+  // Detect selected text inside MedMind answers
   function handleTextSelection(e) {
     const selection = window.getSelection();
 
@@ -208,7 +206,7 @@ export default function Tutor({ onBack }) {
     });
   }
 
-  // Put selected text into the question box
+  // Ask about selected text
   function askAboutSelection() {
     if (!textSelection?.text) return;
 
@@ -219,7 +217,6 @@ export default function Tutor({ onBack }) {
     );
 
     setTextSelection(null);
-
     window.getSelection()?.removeAllRanges();
 
     setTimeout(() => {
@@ -268,6 +265,7 @@ export default function Tutor({ onBack }) {
     setSelectedImage(null);
   }
 
+  // Streaming AI response
   async function askAI(e) {
     e.preventDefault();
 
@@ -300,6 +298,8 @@ export default function Tutor({ onBack }) {
     setError("");
     scrollToNewQuestion();
 
+    let assistantId = null;
+
     try {
       let imageData = null;
       let imageMimeType = null;
@@ -323,21 +323,124 @@ export default function Tutor({ onBack }) {
         })
       });
 
-      const data = await response.json();
-
       if (!response.ok) {
-        throw new Error(data.error || "Something went wrong.");
+        let errorMessage = "Something went wrong.";
+
+        try {
+          const data = await response.json();
+          errorMessage = data.error || errorMessage;
+        } catch {}
+
+        throw new Error(errorMessage);
       }
+
+      if (!response.body) {
+        throw new Error("Streaming is not supported by this connection.");
+      }
+
+      assistantId = `assistant-${Date.now()}-${Math.random()}`;
 
       setMessages((prev) => [
         ...prev,
-        { role: "assistant", text: data.answer }
+        {
+          id: assistantId,
+          role: "assistant",
+          text: ""
+        }
       ]);
+
+      const reader = response.body.getReader();
+      const decoder = new TextDecoder();
+
+      let buffer = "";
+      let receivedText = "";
+
+      function processFrame(frame) {
+        const lines = frame.split(/\r?\n/);
+
+        const dataLines = lines
+          .filter((line) => line.startsWith("data:"))
+          .map((line) => line.slice(5).trim());
+
+        if (!dataLines.length) return;
+
+        const rawData = dataLines.join("\n");
+
+        if (rawData === "[DONE]") return;
+
+        const eventName = lines
+          .find((line) => line.startsWith("event:"))
+          ?.slice(6)
+          .trim();
+
+        let eventData;
+
+        try {
+          eventData = JSON.parse(rawData);
+        } catch {
+          return;
+        }
+
+        if (eventName === "error" || eventData.error) {
+          throw new Error(
+            eventData.error || "The response stream was interrupted."
+          );
+        }
+
+        if (typeof eventData.text === "string") {
+          receivedText += eventData.text;
+
+          setMessages((prev) =>
+            prev.map((message) =>
+              message.id === assistantId
+                ? { ...message, text: receivedText }
+                : message
+            )
+          );
+        }
+      }
+
+      while (true) {
+        const { value, done } = await reader.read();
+
+        if (done) break;
+
+        buffer += decoder.decode(value, { stream: true });
+
+        const frames = buffer.split(/\r?\n\r?\n/);
+        buffer = frames.pop() || "";
+
+        for (const frame of frames) {
+          processFrame(frame);
+        }
+      }
+
+      buffer += decoder.decode();
+
+      if (buffer.trim()) {
+        processFrame(buffer);
+      }
+
+      if (!receivedText.trim()) {
+        throw new Error(
+          "The AI returned an empty response. Please try again."
+        );
+      }
 
     } catch (err) {
       setError(
         err.message || "Connection failed. Please try again."
       );
+
+      if (assistantId) {
+        setMessages((prev) =>
+          prev.filter(
+            (message) =>
+              message.id !== assistantId || message.text.trim()
+          )
+        );
+      }
+
     } finally {
       setLoading(false);
     }
@@ -440,6 +543,7 @@ export default function Tutor({ onBack }) {
             Ask questions and learn in your own way.
           </p>
 
+          {/* Explanation depth */}
           <div style={{ marginTop: "25px" }}>
             <label
               style={{
@@ -473,11 +577,21 @@ export default function Tutor({ onBack }) {
                   textAlign: "left"
                 }}
               >
-                <div style={{ display: "flex", alignItems: "center", gap: "8px", fontWeight: "bold" }}>
+                <div style={{
+                  display: "flex",
+                  alignItems: "center",
+                  gap: "8px",
+                  fontWeight: "bold"
+                }}>
                   <Zap size={19} color="#2563eb" />
                   Quick Answer
                 </div>
-                <div style={{ marginTop: "7px", fontSize: "13px", color: "#64748b" }}>
+
+                <div style={{
+                  marginTop: "7px",
+                  fontSize: "13px",
+                  color: "#64748b"
+                }}>
                   Short, direct answers with key points.
                 </div>
               </button>
@@ -497,17 +611,28 @@ export default function Tutor({ onBack }) {
                   textAlign: "left"
                 }}
               >
-                <div style={{ display: "flex", alignItems: "center", gap: "8px", fontWeight: "bold" }}>
+                <div style={{
+                  display: "flex",
+                  alignItems: "center",
+                  gap: "8px",
+                  fontWeight: "bold"
+                }}>
                   <BookOpen size={19} color="#2563eb" />
                   Deep Explanation
                 </div>
-                <div style={{ marginTop: "7px", fontSize: "13px", color: "#64748b" }}>
+
+                <div style={{
+                  marginTop: "7px",
+                  fontSize: "13px",
+                  color: "#64748b"
+                }}>
                   Step-by-step explanations, WHY, and clinical links.
                 </div>
               </button>
             </div>
           </div>
 
+          {/* Conversation */}
           <div
             style={{
               marginTop: "25px",
@@ -532,7 +657,7 @@ export default function Tutor({ onBack }) {
 
             {messages.map((message, index) => (
               <div
-                key={index}
+                key={message.id || index}
                 ref={index === latestUserIndex ? questionStartRef : null}
                 style={{
                   alignSelf: message.role === "user" ? "flex-end" : "stretch",
@@ -576,7 +701,26 @@ export default function Tutor({ onBack }) {
                 )}
 
                 {message.role === "assistant" ? (
-                  <FormattedAnswer text={message.text} />
+                  <>
+                    <FormattedAnswer text={message.text} />
+
+                    {loading &&
+                      message.id &&
+                      index === messages.length - 1 && (
+                        <span
+                          style={{
+                            display: "inline-block",
+                            width: "7px",
+                            height: "17px",
+                            background: "#2563eb",
+                            marginInlineStart: "4px",
+                            verticalAlign: "middle",
+                            borderRadius: "2px",
+                            animation: "medmindBlink 0.8s infinite"
+                          }}
+                        />
+                      )}
+                  </>
                 ) : (
                   <div style={{ whiteSpace: "pre-wrap" }}>
                     {message.text}
@@ -585,7 +729,7 @@ export default function Tutor({ onBack }) {
               </div>
             ))}
 
-            {loading && (
+            {loading && messages[messages.length - 1]?.role !== "assistant" && (
               <div
                 style={{
                   color: "#2563eb",
@@ -607,6 +751,7 @@ export default function Tutor({ onBack }) {
             </p>
           )}
 
+          {/* Question form */}
           <form onSubmit={askAI} style={{ marginTop: "20px" }}>
             {selectedImage && (
               <div
@@ -654,7 +799,11 @@ export default function Tutor({ onBack }) {
                   <X size={16} />
                 </button>
 
-                <div style={{ fontSize: "12px", color: "#64748b", marginTop: "5px" }}>
+                <div style={{
+                  fontSize: "12px",
+                  color: "#64748b",
+                  marginTop: "5px"
+                }}>
                   {selectedImage.name}
                 </div>
               </div>
@@ -764,6 +913,13 @@ export default function Tutor({ onBack }) {
           </p>
         </div>
       </div>
+
+      <style>{`
+        @keyframes medmindBlink {
+          0%, 100% { opacity: 1; }
+          50% { opacity: 0; }
+        }
+      `}</style>
     </div>
   );
 }
