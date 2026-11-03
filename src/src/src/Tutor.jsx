@@ -1,7 +1,14 @@
 
-
 import React, { useState } from "react";
-import { ArrowLeft, Brain, Send, BookOpen, Loader2, Image as ImageIcon, ExternalLink } from "lucide-react";
+import {
+  ArrowLeft,
+  Brain,
+  Send,
+  BookOpen,
+  Loader2,
+  Image as ImageIcon,
+  ExternalLink
+} from "lucide-react";
 
 function formatInline(text) {
   const parts = text.split(/(\*\*.*?\*\*)/g);
@@ -200,7 +207,9 @@ export default function Tutor({ onBack }) {
         [messageIndex]: {
           loading: false,
           images,
-          error: images.length ? "" : "No suitable images found. Try a more specific topic."
+          error: images.length
+            ? ""
+            : "No suitable images found. Try a more specific topic."
         }
       }));
     } catch (err) {
@@ -222,6 +231,12 @@ export default function Tutor({ onBack }) {
 
     const currentQuestion = question.trim();
 
+    // حفظ سجل المحادثة السابق قبل إضافة السؤال الجديد
+    const conversationHistory = messages.map((message) => ({
+      role: message.role,
+      text: message.text
+    }));
+
     setMessages((prev) => [
       ...prev,
       { role: "user", text: currentQuestion }
@@ -238,7 +253,8 @@ export default function Tutor({ onBack }) {
         body: JSON.stringify({
           subject,
           topic,
-          question: currentQuestion
+          question: currentQuestion,
+          history: conversationHistory
         })
       });
 
