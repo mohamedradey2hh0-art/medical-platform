@@ -1,5 +1,5 @@
 
-import React, { useState, useEffect, useRef } from "react";
+import React, { useState, useRef } from "react";
 import {
   ArrowLeft,
   Brain,
@@ -94,8 +94,7 @@ function FormattedAnswer({ text }) {
           style={{
             color: "#1e40af",
             margin: "18px 0 8px",
-            fontSize:
-              level === 1 ? "21px" : level === 2 ? "18px" : "16px",
+            fontSize: level === 1 ? "21px" : level === 2 ? "18px" : "16px",
             lineHeight: 1.5
           }}
         >
@@ -136,18 +135,17 @@ export default function Tutor({ onBack }) {
   const [error, setError] = useState("");
 
   const questionStartRef = useRef(null);
-  const answerEndRef = useRef(null);
 
   const API_URL =
     "https://medmind-ai.mohamedradey2hh0.workers.dev/";
 
-  function scrollToElement(ref) {
+  function scrollToNewQuestion() {
     setTimeout(() => {
-      ref.current?.scrollIntoView({
+      questionStartRef.current?.scrollIntoView({
         behavior: "smooth",
         block: "start"
       });
-    }, 150);
+    }, 200);
   }
 
   async function askAI(e) {
@@ -171,8 +169,8 @@ export default function Tutor({ onBack }) {
     setLoading(true);
     setError("");
 
-    // Scroll to the beginning of the new question
-    scrollToElement(questionStartRef);
+    // Scroll to the beginning of the new question only
+    scrollToNewQuestion();
 
     try {
       const response = await fetch(API_URL, {
@@ -198,13 +196,7 @@ export default function Tutor({ onBack }) {
         { role: "assistant", text: data.answer }
       ]);
 
-      // Scroll to the end of the completed answer
-      setTimeout(() => {
-        answerEndRef.current?.scrollIntoView({
-          behavior: "smooth",
-          block: "end"
-        });
-      }, 200);
+      // No automatic scrolling after the answer arrives
 
     } catch (err) {
       setError(
@@ -214,6 +206,10 @@ export default function Tutor({ onBack }) {
       setLoading(false);
     }
   }
+
+  const latestUserIndex = messages
+    .map((message) => message.role)
+    .lastIndexOf("user");
 
   return (
     <div
@@ -239,11 +235,7 @@ export default function Tutor({ onBack }) {
             color: "#1e3a8a"
           }}
         >
-          <ArrowLeft
-            size={17}
-            style={{ verticalAlign: "middle" }}
-          />{" "}
-          Back
+          <ArrowLeft size={17} style={{ verticalAlign: "middle" }} /> Back
         </button>
 
         <div
@@ -287,8 +279,7 @@ export default function Tutor({ onBack }) {
             <div
               style={{
                 display: "grid",
-                gridTemplateColumns:
-                  "repeat(auto-fit, minmax(200px, 1fr))",
+                gridTemplateColumns: "repeat(auto-fit, minmax(200px, 1fr))",
                 gap: "12px"
               }}
             >
@@ -298,12 +289,10 @@ export default function Tutor({ onBack }) {
                 style={{
                   padding: "16px",
                   borderRadius: "12px",
-                  border:
-                    depth === "quick"
-                      ? "2px solid #2563eb"
-                      : "1px solid #dbe3ef",
-                  background:
-                    depth === "quick" ? "#eff6ff" : "white",
+                  border: depth === "quick"
+                    ? "2px solid #2563eb"
+                    : "1px solid #dbe3ef",
+                  background: depth === "quick" ? "#eff6ff" : "white",
                   color: "#1e3a8a",
                   cursor: "pointer",
                   textAlign: "left"
@@ -323,13 +312,11 @@ export default function Tutor({ onBack }) {
                 onClick={() => setDepth("deep")}
                 style={{
                   padding: "16px",
-                  border:
-                    depth === "deep"
-                      ? "2px solid #2563eb"
-                      : "1px solid #dbe3ef",
+                  border: depth === "deep"
+                    ? "2px solid #2563eb"
+                    : "1px solid #dbe3ef",
                   borderRadius: "12px",
-                  background:
-                    depth === "deep" ? "#eff6ff" : "white",
+                  background: depth === "deep" ? "#eff6ff" : "white",
                   color: "#1e3a8a",
                   cursor: "pointer",
                   textAlign: "left"
@@ -368,56 +355,38 @@ export default function Tutor({ onBack }) {
               </div>
             )}
 
-            {messages.map((message, index) => {
-              const isLatestUserQuestion =
-                message.role === "user" &&
-                index === messages.length - 1 -
-                  (loading ? 0 : 1);
-
-              return (
-                <React.Fragment key={index}>
-                  {message.role === "user" && isLatestUserQuestion && (
-                    <div ref={questionStartRef} />
-                  )}
-
-                  <div
-                    style={{
-                      alignSelf:
-                        message.role === "user"
-                          ? "flex-end"
-                          : "stretch",
-                      background:
-                        message.role === "user"
-                          ? "#2563eb"
-                          : "#f8fafc",
-                      color:
-                        message.role === "user"
-                          ? "white"
-                          : "#1e293b",
-                      padding: "14px 17px",
-                      borderRadius: "14px",
-                      maxWidth:
-                        message.role === "user" ? "90%" : "100%",
-                      border:
-                        message.role === "assistant"
-                          ? "1px solid #e2e8f0"
-                          : "none",
-                      lineHeight: 1.7,
-                      overflowWrap: "anywhere",
-                      fontFamily: "Cairo, sans-serif"
-                    }}
-                  >
-                    {message.role === "assistant" ? (
-                      <FormattedAnswer text={message.text} />
-                    ) : (
-                      <div style={{ whiteSpace: "pre-wrap" }}>
-                        {message.text}
-                      </div>
-                    )}
+            {messages.map((message, index) => (
+              <div
+                key={index}
+                ref={
+                  index === latestUserIndex
+                    ? questionStartRef
+                    : null
+                }
+                style={{
+                  alignSelf: message.role === "user" ? "flex-end" : "stretch",
+                  background: message.role === "user" ? "#2563eb" : "#f8fafc",
+                  color: message.role === "user" ? "white" : "#1e293b",
+                  padding: "14px 17px",
+                  borderRadius: "14px",
+                  maxWidth: message.role === "user" ? "90%" : "100%",
+                  border: message.role === "assistant"
+                    ? "1px solid #e2e8f0"
+                    : "none",
+                  lineHeight: 1.7,
+                  overflowWrap: "anywhere",
+                  fontFamily: "Cairo, sans-serif"
+                }}
+              >
+                {message.role === "assistant" ? (
+                  <FormattedAnswer text={message.text} />
+                ) : (
+                  <div style={{ whiteSpace: "pre-wrap" }}>
+                    {message.text}
                   </div>
-                </React.Fragment>
-              );
-            })}
+                )}
+              </div>
+            ))}
 
             {loading && (
               <div
@@ -433,8 +402,6 @@ export default function Tutor({ onBack }) {
                 MedMind is thinking...
               </div>
             )}
-
-            <div ref={answerEndRef} />
           </div>
 
           {error && (
@@ -478,8 +445,7 @@ export default function Tutor({ onBack }) {
                 borderRadius: "12px",
                 padding: "13px 22px",
                 cursor: "pointer",
-                opacity:
-                  loading || !question.trim() ? 0.6 : 1,
+                opacity: loading || !question.trim() ? 0.6 : 1,
                 display: "flex",
                 alignItems: "center",
                 gap: "8px"
