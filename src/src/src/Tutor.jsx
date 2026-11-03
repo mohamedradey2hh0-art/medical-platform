@@ -1,18 +1,19 @@
 
-import React, { useState, useRef } from "react";
+import React, { useState, useRef, useEffect } from "react";
 import {
   ArrowLeft,
   Brain,
   Send,
   Loader2,
   Zap,
-  BookOpen
+  BookOpen,
+  Camera,
+  Image as ImageIcon,
+  X
 } from "lucide-react";
 
 function formatInline(text) {
-  const parts = text.split(/(\*\*.*?\*\*)/g);
-
-  return parts.map((part, index) => {
+  return text.split(/(\*\*.*?\*\*)/g).map((part, index) => {
     if (part.startsWith("**") && part.endsWith("**")) {
       return <strong key={index}>{part.slice(2, -2)}</strong>;
     }
@@ -70,9 +71,7 @@ function FormattedAnswer({ text }) {
     if (bullet || numbered) {
       const currentType = numbered ? "number" : "bullet";
 
-      if (listType && listType !== currentType) {
-        flushList();
-      }
+      if (listType && listType !== currentType) flushList();
 
       listType = currentType;
       listItems.push((bullet || numbered)[1]);
@@ -127,17 +126,42 @@ function FormattedAnswer({ text }) {
   return <div>{elements}</div>;
 }
 
+function fileToBase64(file) {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+
+    reader.onload = () => {
+      const result = reader.result;
+      resolve(String(result).split(",")[1]);
+    };
+
+    reader.onerror = () => reject(new Error("Could not read the image."));
+    reader.readAsDataURL(file);
+  });
+}
+
 export default function Tutor({ onBack }) {
   const [depth, setDepth] = useState("quick");
   const [question, setQuestion] = useState("");
   const [messages, setMessages] = useState([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
+  const [selectedImage, setSelectedImage] = useState(null);
 
   const questionStartRef = useRef(null);
+  const galleryInputRef = useRef(null);
+  const cameraInputRef = useRef(null);
 
   const API_URL =
     "https://medmind-ai.mohamedradey2hh0.workers.dev/";
+
+  useEffect(() => {
+    return () => {
+      if (selectedImage?.preview) {
+        URL.revokeObjectURL(selectedImage.preview);
+      }
+    };
+  }, [selectedImage]);
 
   function scrollToNewQuestion() {
     setTimeout(() => {
@@ -148,12 +172,49 @@ export default function Tutor({ onBack }) {
     }, 200);
   }
 
+  function handleImageSelect(e) {
+    const file = e.target.files?.[0];
+    e.target.value = "";
+
+    if (!file) return;
+
+    if (!file.type.startsWith("image/")) {
+      setError("Please select a valid image.");
+      return;
+    }
+
+    if (file.size > 5 * 1024 * 1024) {
+      setError("Image size must be 5 MB or less.");
+      return;
+    }
+
+    setError("");
+
+    setSelectedImage({
+      file,
+      preview: URL.createObjectURL(file),
+      name: file.name
+    });
+  }
+
+  function removeImage() {
+    if (selectedImage?.preview) {
+      URL.revokeObjectURL(selectedImage.preview);
+    }
+
+    setSelectedImage(null);
+  }
+
   async function askAI(e) {
     e.preventDefault();
 
-    if (!question.trim() || loading) return;
+    if ((!question.trim() && !selectedImage) || loading) return;
 
-    const currentQuestion = question.trim();
+    const currentQuestion =
+      question.trim() ||
+      "Please analyze this image and explain it step by step.";
+
+    const imageForRequest = selectedImage;
 
     const conversationHistory = messages.map((message) => ({
       role: message.role,
@@ -162,17 +223,28 @@ export default function Tutor({ onBack }) {
 
     setMessages((prev) => [
       ...prev,
-      { role: "user", text: currentQuestion }
+      {
+        role: "user",
+        text: currentQuestion,
+        imagePreview: imageForRequest?.preview || null
+      }
     ]);
 
     setQuestion("");
+    setSelectedImage(null);
     setLoading(true);
     setError("");
-
-    // Scroll to the beginning of the new question only
     scrollToNewQuestion();
 
     try {
+      let imageData = null;
+      let imageMimeType = null;
+
+      if (imageForRequest) {
+        imageData = await fileToBase64(imageForRequest.file);
+        imageMimeType = imageForRequest.file.type;
+      }
+
       const response = await fetch(API_URL, {
         method: "POST",
         headers: {
@@ -181,7 +253,9 @@ export default function Tutor({ onBack }) {
         body: JSON.stringify({
           question: currentQuestion,
           depth,
-          history: conversationHistory
+          history: conversationHistory,
+          imageData,
+          imageMimeType
         })
       });
 
@@ -195,8 +269,6 @@ export default function Tutor({ onBack }) {
         ...prev,
         { role: "assistant", text: data.answer }
       ]);
-
-      // No automatic scrolling after the answer arrives
 
     } catch (err) {
       setError(
@@ -358,11 +430,7 @@ export default function Tutor({ onBack }) {
             {messages.map((message, index) => (
               <div
                 key={index}
-                ref={
-                  index === latestUserIndex
-                    ? questionStartRef
-                    : null
-                }
+                ref={index === latestUserIndex ? questionStartRef : null}
                 style={{
                   alignSelf: message.role === "user" ? "flex-end" : "stretch",
                   background: message.role === "user" ? "#2563eb" : "#f8fafc",
@@ -378,6 +446,22 @@ export default function Tutor({ onBack }) {
                   fontFamily: "Cairo, sans-serif"
                 }}
               >
+                {message.imagePreview && (
+                  <img
+                    src={message.imagePreview}
+                    alt="Uploaded question"
+                    style={{
+                      display: "block",
+                      maxWidth: "100%",
+                      maxHeight: "260px",
+                      objectFit: "contain",
+                      borderRadius: "10px",
+                      marginBottom: "10px",
+                      background: "white"
+                    }}
+                  />
+                )}
+
                 {message.role === "assistant" ? (
                   <FormattedAnswer text={message.text} />
                 ) : (
@@ -411,6 +495,59 @@ export default function Tutor({ onBack }) {
           )}
 
           <form onSubmit={askAI} style={{ marginTop: "20px" }}>
+
+            {selectedImage && (
+              <div
+                style={{
+                  position: "relative",
+                  display: "inline-block",
+                  marginBottom: "12px",
+                  border: "1px solid #dbe3ef",
+                  borderRadius: "12px",
+                  padding: "7px",
+                  background: "#f8fafc"
+                }}
+              >
+                <img
+                  src={selectedImage.preview}
+                  alt="Selected image preview"
+                  style={{
+                    display: "block",
+                    maxWidth: "220px",
+                    maxHeight: "180px",
+                    objectFit: "contain",
+                    borderRadius: "8px"
+                  }}
+                />
+
+                <button
+                  type="button"
+                  onClick={removeImage}
+                  aria-label="Remove image"
+                  style={{
+                    position: "absolute",
+                    top: "3px",
+                    right: "3px",
+                    border: "none",
+                    borderRadius: "50%",
+                    background: "#dc2626",
+                    color: "white",
+                    width: "27px",
+                    height: "27px",
+                    cursor: "pointer",
+                    display: "grid",
+                    placeItems: "center"
+                  }}
+                >
+                  <X size={16} />
+                </button>
+
+                <div style={{ fontSize: "12px", color: "#64748b", marginTop: "5px" }}>
+                  {selectedImage.name}
+                </div>
+              </div>
+            )}
+
             <textarea
               value={question}
               onChange={(e) => setQuestion(e.target.value)}
@@ -418,12 +555,12 @@ export default function Tutor({ onBack }) {
                 if (e.key === "Enter" && !e.shiftKey) {
                   e.preventDefault();
 
-                  if (question.trim() && !loading) {
+                  if ((question.trim() || selectedImage) && !loading) {
                     e.currentTarget.form.requestSubmit();
                   }
                 }
               }}
-              placeholder="Ask your medical question..."
+              placeholder="Ask your medical question or explain the uploaded image..."
               rows={4}
               style={{
                 ...fieldStyle,
@@ -434,25 +571,71 @@ export default function Tutor({ onBack }) {
               }}
             />
 
-            <button
-              type="submit"
-              disabled={loading || !question.trim()}
+            <input
+              ref={galleryInputRef}
+              type="file"
+              accept="image/*"
+              onChange={handleImageSelect}
+              style={{ display: "none" }}
+            />
+
+            <input
+              ref={cameraInputRef}
+              type="file"
+              accept="image/*"
+              capture="environment"
+              onChange={handleImageSelect}
+              style={{ display: "none" }}
+            />
+
+            <div
               style={{
-                marginTop: "12px",
-                background: "#2563eb",
-                color: "white",
-                border: "none",
-                borderRadius: "12px",
-                padding: "13px 22px",
-                cursor: "pointer",
-                opacity: loading || !question.trim() ? 0.6 : 1,
                 display: "flex",
+                flexWrap: "wrap",
                 alignItems: "center",
-                gap: "8px"
+                gap: "10px",
+                marginTop: "12px"
               }}
             >
-              <Send size={17} /> Ask MedMind
-            </button>
+              <button
+                type="button"
+                onClick={() => cameraInputRef.current?.click()}
+                disabled={loading}
+                style={secondaryButtonStyle}
+              >
+                <Camera size={18} /> Take Photo
+              </button>
+
+              <button
+                type="button"
+                onClick={() => galleryInputRef.current?.click()}
+                disabled={loading}
+                style={secondaryButtonStyle}
+              >
+                <ImageIcon size={18} /> Upload Image
+              </button>
+
+              <button
+                type="submit"
+                disabled={loading || (!question.trim() && !selectedImage)}
+                style={{
+                  marginLeft: "auto",
+                  background: "#2563eb",
+                  color: "white",
+                  border: "none",
+                  borderRadius: "12px",
+                  padding: "13px 22px",
+                  cursor: "pointer",
+                  opacity: loading || (!question.trim() && !selectedImage) ? 0.6 : 1,
+                  display: "flex",
+                  alignItems: "center",
+                  gap: "8px"
+                }}
+              >
+                {loading ? <Loader2 size={17} /> : <Send size={17} />}
+                Ask MedMind
+              </button>
+            </div>
           </form>
 
           <p
@@ -481,4 +664,16 @@ const fieldStyle = {
   background: "white",
   fontSize: "15px",
   outline: "none"
+};
+
+const secondaryButtonStyle = {
+  background: "#eff6ff",
+  color: "#1e40af",
+  border: "1px solid #bfdbfe",
+  borderRadius: "12px",
+  padding: "12px 14px",
+  cursor: "pointer",
+  display: "flex",
+  alignItems: "center",
+  gap: "7px"
 };
