@@ -1,4 +1,3 @@
-
 import React, { useState, useRef } from "react";
 import {
   ArrowLeft,
@@ -154,8 +153,9 @@ export default function Tutor({ onBack }) {
   const galleryInputRef = useRef(null);
   const cameraInputRef = useRef(null);
 
+  // Test Worker temporarily
   const API_URL =
-    "https://medmind-ai.mohamedradey2hh0.workers.dev/";
+    "https://medmind-test.mohamedradey2hh0.workers.dev/";
 
   function scrollToNewQuestion() {
     setTimeout(() => {
