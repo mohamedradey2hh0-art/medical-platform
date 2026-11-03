@@ -231,7 +231,6 @@ export default function Tutor({ onBack }) {
 
     const currentQuestion = question.trim();
 
-    // حفظ سجل المحادثة السابق قبل إضافة السؤال الجديد
     const conversationHistory = messages.map((message) => ({
       role: message.role,
       text: message.text
@@ -448,8 +447,9 @@ export default function Tutor({ onBack }) {
                                 overflow: "hidden"
                               }}
                             >
+                              {/* الضغط على الصورة يفتح ملف الصورة نفسه */}
                               <a
-                                href={image.source}
+                                href={image.image}
                                 target="_blank"
                                 rel="noreferrer"
                               >
