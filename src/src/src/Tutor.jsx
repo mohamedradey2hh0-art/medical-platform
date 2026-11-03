@@ -138,10 +138,14 @@ export default function Tutor({ onBack }) {
   const bottomRef = useRef(null);
 
   useEffect(() => {
-    bottomRef.current?.scrollIntoView({
-      behavior: "smooth",
-      block: "end"
-    });
+    const timer = setTimeout(() => {
+      bottomRef.current?.scrollIntoView({
+        behavior: "smooth",
+        block: "end"
+      });
+    }, 150);
+
+    return () => clearTimeout(timer);
   }, [messages, loading]);
 
   const API_URL =
@@ -332,12 +336,11 @@ export default function Tutor({ onBack }) {
             </div>
           </div>
 
+          {/* Conversation: page-level scrolling */}
           <div
             style={{
               marginTop: "25px",
               minHeight: "180px",
-              maxHeight: "550px",
-              overflowY: "auto",
               display: "flex",
               flexDirection: "column",
               gap: "14px"
