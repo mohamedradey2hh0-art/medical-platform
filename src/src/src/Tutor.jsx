@@ -86,7 +86,8 @@ function FormattedAnswer({ text }) {
 
     if (heading) {
       const level = heading[1].length;
-      const HeadingTag = level === 1 ? "h2" : level === 2 ? "h3" : "h4";
+      const HeadingTag =
+        level === 1 ? "h2" : level === 2 ? "h3" : "h4";
 
       elements.push(
         <HeadingTag
@@ -143,6 +144,7 @@ export default function Tutor({ onBack }) {
 
   const API_URL = "https://medmind-ai.mohamedradey2hh0.workers.dev/";
 
+  // Search for related medical images using Wikimedia Commons
   async function loadImages(messageIndex) {
     const previousUserMessage = [...messages]
       .slice(0, messageIndex)
@@ -150,7 +152,7 @@ export default function Tutor({ onBack }) {
       .find((message) => message.role === "user");
 
     const searchTerm = topic.trim()
-      ? `${topic.trim()} medical diagram`
+      ? `${topic.trim()} medical`
       : `${previousUserMessage?.text || subject} medical illustration`;
 
     setVisualResults((prev) => ({
@@ -163,12 +165,46 @@ export default function Tutor({ onBack }) {
     }));
 
     try {
-      const params = new URLSearchParams({
+      // Step 1: Search Wikimedia Commons for image files
+      const searchParams = new URLSearchParams({
         action: "query",
-        generator: "search",
-        gsrsearch: searchTerm,
-        gsrnamespace: "6",
-        gsrlimit: "6",
+        list: "search",
+        srsearch: searchTerm,
+        srnamespace: "6",
+        srlimit: "8",
+        format: "json",
+        origin: "*"
+      });
+
+      const searchResponse = await fetch(
+        `https://commons.wikimedia.org/w/api.php?${searchParams}`
+      );
+
+      if (!searchResponse.ok) {
+        throw new Error("Image search request failed.");
+      }
+
+      const searchData = await searchResponse.json();
+      const results = searchData.query?.search || [];
+
+      if (results.length === 0) {
+        setVisualResults((prev) => ({
+          ...prev,
+          [messageIndex]: {
+            loading: false,
+            images: [],
+            error: "No images found. Try another medical topic."
+          }
+        }));
+        return;
+      }
+
+      // Step 2: Get image URLs and license metadata
+      const pageIds = results.map((item) => item.pageid).join("|");
+
+      const imageParams = new URLSearchParams({
+        action: "query",
+        pageids: pageIds,
         prop: "imageinfo",
         iiprop: "url|extmetadata",
         iiurlwidth: "600",
@@ -176,16 +212,16 @@ export default function Tutor({ onBack }) {
         origin: "*"
       });
 
-      const response = await fetch(
-        `https://commons.wikimedia.org/w/api.php?${params.toString()}`
+      const imageResponse = await fetch(
+        `https://commons.wikimedia.org/w/api.php?${imageParams}`
       );
 
-      if (!response.ok) {
-        throw new Error("Image search failed.");
+      if (!imageResponse.ok) {
+        throw new Error("Could not retrieve image details.");
       }
 
-      const data = await response.json();
-      const pages = Object.values(data.query?.pages || {});
+      const imageData = await imageResponse.json();
+      const pages = Object.values(imageData.query?.pages || {});
 
       const images = pages
         .filter((page) => page.imageinfo?.[0]?.thumburl)
@@ -210,10 +246,13 @@ export default function Tutor({ onBack }) {
           images,
           error: images.length
             ? ""
-            : "No suitable images found. Try another topic."
+            : "No usable image files found for this topic."
         }
       }));
+
     } catch (err) {
+      console.error("MedMind image search error:", err);
+
       setVisualResults((prev) => ({
         ...prev,
         [messageIndex]: {
@@ -225,6 +264,7 @@ export default function Tutor({ onBack }) {
     }
   }
 
+  // Send question to MedMind AI
   async function askAI(e) {
     e.preventDefault();
 
@@ -270,6 +310,7 @@ export default function Tutor({ onBack }) {
         ...prev,
         { role: "assistant", text: data.answer }
       ]);
+
     } catch (err) {
       setError(err.message || "Connection failed. Please try again.");
     } finally {
@@ -278,13 +319,15 @@ export default function Tutor({ onBack }) {
   }
 
   return (
-    <div style={{
-      minHeight: "100vh",
-      background: "#f5f7fb",
-      padding: "25px 16px",
-      fontFamily: "Arial, sans-serif",
-      color: "#172554"
-    }}>
+    <div
+      style={{
+        minHeight: "100vh",
+        background: "#f5f7fb",
+        padding: "25px 16px",
+        fontFamily: "Arial, sans-serif",
+        color: "#172554"
+      }}
+    >
       <div style={{ maxWidth: "850px", margin: "auto" }}>
 
         <button
@@ -302,18 +345,22 @@ export default function Tutor({ onBack }) {
           <ArrowLeft size={17} style={{ verticalAlign: "middle" }} /> Back
         </button>
 
-        <div style={{
-          background: "white",
-          padding: "25px",
-          borderRadius: "18px",
-          boxShadow: "0 5px 25px #00000008"
-        }}>
-          <div style={{
-            display: "flex",
-            alignItems: "center",
-            gap: "12px",
-            marginBottom: "10px"
-          }}>
+        <div
+          style={{
+            background: "white",
+            padding: "25px",
+            borderRadius: "18px",
+            boxShadow: "0 5px 25px #00000008"
+          }}
+        >
+          <div
+            style={{
+              display: "flex",
+              alignItems: "center",
+              gap: "12px",
+              marginBottom: "10px"
+            }}
+          >
             <Brain size={32} color="#2563eb" />
             <h1 style={{ margin: 0, fontSize: "26px" }}>
               Medical AI Tutor
@@ -325,12 +372,14 @@ export default function Tutor({ onBack }) {
             Ask questions, understand concepts, and learn step by step.
           </p>
 
-          <div style={{
-            display: "grid",
-            gridTemplateColumns: "repeat(auto-fit, minmax(200px, 1fr))",
-            gap: "15px",
-            marginTop: "25px"
-          }}>
+          <div
+            style={{
+              display: "grid",
+              gridTemplateColumns: "repeat(auto-fit, minmax(200px, 1fr))",
+              gap: "15px",
+              marginTop: "25px"
+            }}
+          >
             <label>
               <span style={{ display: "block", marginBottom: "8px" }}>
                 <BookOpen size={15} style={{ verticalAlign: "middle" }} /> Subject
@@ -342,11 +391,20 @@ export default function Tutor({ onBack }) {
                 style={fieldStyle}
               >
                 {[
-                  "Anatomy", "Physiology", "Biochemistry",
-                  "Pathology", "Pharmacology", "Internal Medicine",
-                  "Surgery", "Pediatrics", "Ophthalmology",
-                  "ENT", "Other"
-                ].map((s) => <option key={s}>{s}</option>)}
+                  "Anatomy",
+                  "Physiology",
+                  "Biochemistry",
+                  "Pathology",
+                  "Pharmacology",
+                  "Internal Medicine",
+                  "Surgery",
+                  "Pediatrics",
+                  "Ophthalmology",
+                  "ENT",
+                  "Other"
+                ].map((s) => (
+                  <option key={s}>{s}</option>
+                ))}
               </select>
             </label>
 
@@ -364,21 +422,25 @@ export default function Tutor({ onBack }) {
             </label>
           </div>
 
-          <div style={{
-            marginTop: "25px",
-            minHeight: "180px",
-            maxHeight: "550px",
-            overflowY: "auto",
-            display: "flex",
-            flexDirection: "column",
-            gap: "14px"
-          }}>
+          <div
+            style={{
+              marginTop: "25px",
+              minHeight: "180px",
+              maxHeight: "550px",
+              overflowY: "auto",
+              display: "flex",
+              flexDirection: "column",
+              gap: "14px"
+            }}
+          >
             {messages.length === 0 && (
-              <div style={{
-                textAlign: "center",
-                padding: "35px 10px",
-                color: "#64748b"
-              }}>
+              <div
+                style={{
+                  textAlign: "center",
+                  padding: "35px 10px",
+                  color: "#64748b"
+                }}
+              >
                 <Brain size={38} color="#93c5fd" />
                 <p>What would you like to understand today?</p>
               </div>
@@ -388,13 +450,19 @@ export default function Tutor({ onBack }) {
               <div
                 key={index}
                 style={{
-                  alignSelf: message.role === "user" ? "flex-end" : "stretch",
-                  background: message.role === "user" ? "#2563eb" : "#f8fafc",
-                  color: message.role === "user" ? "white" : "#1e293b",
+                  alignSelf:
+                    message.role === "user" ? "flex-end" : "stretch",
+                  background:
+                    message.role === "user" ? "#2563eb" : "#f8fafc",
+                  color:
+                    message.role === "user" ? "white" : "#1e293b",
                   padding: "14px 17px",
                   borderRadius: "14px",
                   maxWidth: message.role === "user" ? "90%" : "100%",
-                  border: message.role === "assistant" ? "1px solid #e2e8f0" : "none",
+                  border:
+                    message.role === "assistant"
+                      ? "1px solid #e2e8f0"
+                      : "none",
                   lineHeight: 1.7,
                   overflowWrap: "anywhere"
                 }}
@@ -422,6 +490,7 @@ export default function Tutor({ onBack }) {
                       {visualResults[index]?.loading
                         ? <Loader2 size={16} />
                         : <ImageIcon size={16} />}
+
                       {visualResults[index]?.loading
                         ? "Searching images..."
                         : "Show related images"}
@@ -435,66 +504,85 @@ export default function Tutor({ onBack }) {
                           </p>
                         )}
 
-                        <div style={{
-                          display: "grid",
-                          gridTemplateColumns: "repeat(auto-fit, minmax(180px, 1fr))",
-                          gap: "12px"
-                        }}>
-                          {visualResults[index].images.map((image, imageIndex) => (
-                            <div
-                              key={imageIndex}
-                              style={{
-                                background: "white",
-                                border: "1px solid #e2e8f0",
-                                borderRadius: "10px",
-                                overflow: "hidden"
-                              }}
-                            >
-                              <a
-                                href={image.image}
-                                target="_blank"
-                                rel="noreferrer"
+                        <div
+                          style={{
+                            display: "grid",
+                            gridTemplateColumns:
+                              "repeat(auto-fit, minmax(180px, 1fr))",
+                            gap: "12px"
+                          }}
+                        >
+                          {visualResults[index].images.map(
+                            (image, imageIndex) => (
+                              <div
+                                key={imageIndex}
+                                style={{
+                                  background: "white",
+                                  border: "1px solid #e2e8f0",
+                                  borderRadius: "10px",
+                                  overflow: "hidden"
+                                }}
                               >
-                                <img
-                                  src={image.image}
-                                  alt={image.title}
-                                  loading="lazy"
-                                  style={{
-                                    width: "100%",
-                                    height: "155px",
-                                    objectFit: "contain",
-                                    background: "#f8fafc"
-                                  }}
-                                />
-                              </a>
-
-                              <div style={{ padding: "9px", fontSize: "12px" }}>
-                                <strong>{image.title}</strong>
-
-                                {image.artist && (
-                                  <p style={{ margin: "5px 0", color: "#64748b" }}>
-                                    Creator: {image.artist}
-                                  </p>
-                                )}
-
-                                <p style={{ margin: "5px 0", color: "#64748b" }}>
-                                  License: {image.license || "Check source page"}
-                                </p>
-
                                 <a
-                                  href={image.source}
+                                  href={image.image}
                                   target="_blank"
                                   rel="noreferrer"
-                                  style={{
-                                    color: "#2563eb",
-                                    textDecoration: "none"
-                                  }}
                                 >
-                                  View source <ExternalLink size={12} style={{ verticalAlign: "middle" }} />
+                                  <img
+                                    src={image.image}
+                                    alt={image.title}
+                                    loading="lazy"
+                                    style={{
+                                      width: "100%",
+                                      height: "155px",
+                                      objectFit: "contain",
+                                      background: "#f8fafc"
+                                    }}
+                                  />
                                 </a>
+
+                                <div style={{ padding: "9px", fontSize: "12px" }}>
+                                  <strong>{image.title}</strong>
+
+                                  {image.artist && (
+                                    <p
+                                      style={{
+                                        margin: "5px 0",
+                                        color: "#64748b"
+                                      }}
+                                    >
+                                      Creator: {image.artist}
+                                    </p>
+                                  )}
+
+                                  <p
+                                    style={{
+                                      margin: "5px 0",
+                                      color: "#64748b"
+                                    }}
+                                  >
+                                    License: {image.license || "Check source page"}
+                                  </p>
+
+                                  <a
+                                    href={image.source}
+                                    target="_blank"
+                                    rel="noreferrer"
+                                    style={{
+                                      color: "#2563eb",
+                                      textDecoration: "none"
+                                    }}
+                                  >
+                                    View source{" "}
+                                    <ExternalLink
+                                      size={12}
+                                      style={{ verticalAlign: "middle" }}
+                                    />
+                                  </a>
+                                </div>
                               </div>
-                            </div>
-                          ))}
+                            )
+                          )}
                         </div>
                       </div>
                     )}
@@ -508,13 +596,15 @@ export default function Tutor({ onBack }) {
             ))}
 
             {loading && (
-              <div style={{
-                color: "#2563eb",
-                padding: "10px",
-                display: "flex",
-                alignItems: "center",
-                gap: "8px"
-              }}>
+              <div
+                style={{
+                  color: "#2563eb",
+                  padding: "10px",
+                  display: "flex",
+                  alignItems: "center",
+                  gap: "8px"
+                }}
+              >
                 <Loader2 size={18} className="animate-spin" />
                 MedMind is thinking...
               </div>
@@ -562,12 +652,14 @@ export default function Tutor({ onBack }) {
             </button>
           </form>
 
-          <p style={{
-            color: "#94a3b8",
-            fontSize: "12px",
-            marginTop: "20px",
-            lineHeight: 1.5
-          }}>
+          <p
+            style={{
+              color: "#94a3b8",
+              fontSize: "12px",
+              marginTop: "20px",
+              lineHeight: 1.5
+            }}
+          >
             Educational use only. Always verify medical information
             and consult qualified healthcare professionals when needed.
           </p>
