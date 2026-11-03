@@ -4,8 +4,9 @@ import {
   ArrowLeft,
   Brain,
   Send,
-  BookOpen,
-  Loader2
+  Loader2,
+  Zap,
+  BookOpen
 } from "lucide-react";
 
 function formatInline(text) {
@@ -128,8 +129,7 @@ function FormattedAnswer({ text }) {
 }
 
 export default function Tutor({ onBack }) {
-  const [subject, setSubject] = useState("Anatomy");
-  const [topic, setTopic] = useState("");
+  const [depth, setDepth] = useState("quick");
   const [question, setQuestion] = useState("");
   const [messages, setMessages] = useState([]);
   const [loading, setLoading] = useState(false);
@@ -166,9 +166,8 @@ export default function Tutor({ onBack }) {
           "Content-Type": "application/json"
         },
         body: JSON.stringify({
-          subject,
-          topic,
           question: currentQuestion,
+          depth,
           history: conversationHistory
         })
       });
@@ -248,72 +247,80 @@ export default function Tutor({ onBack }) {
 
           <p style={{ color: "#64748b", lineHeight: 1.6 }}>
             Your intelligent medical learning companion.
-            Ask questions, understand concepts, and learn step by step.
+            Ask questions and learn in your own way.
           </p>
 
-          <div
-            style={{
-              display: "grid",
-              gridTemplateColumns:
-                "repeat(auto-fit, minmax(200px, 1fr))",
-              gap: "15px",
-              marginTop: "25px"
-            }}
-          >
-            <label>
-              <span
-                style={{
-                  display: "block",
-                  marginBottom: "8px"
-                }}
-              >
-                <BookOpen
-                  size={15}
-                  style={{ verticalAlign: "middle" }}
-                />{" "}
-                Subject
-              </span>
-
-              <select
-                value={subject}
-                onChange={(e) => setSubject(e.target.value)}
-                style={fieldStyle}
-              >
-                {[
-                  "Anatomy",
-                  "Physiology",
-                  "Biochemistry",
-                  "Pathology",
-                  "Pharmacology",
-                  "Internal Medicine",
-                  "Surgery",
-                  "Pediatrics",
-                  "Ophthalmology",
-                  "ENT",
-                  "Other"
-                ].map((s) => (
-                  <option key={s}>{s}</option>
-                ))}
-              </select>
+          <div style={{ marginTop: "25px" }}>
+            <label
+              style={{
+                display: "block",
+                marginBottom: "12px",
+                fontWeight: "bold"
+              }}
+            >
+              How would you like the explanation?
             </label>
 
-            <label>
-              <span
+            <div
+              style={{
+                display: "grid",
+                gridTemplateColumns:
+                  "repeat(auto-fit, minmax(200px, 1fr))",
+                gap: "12px"
+              }}
+            >
+              <button
+                type="button"
+                onClick={() => setDepth("quick")}
                 style={{
-                  display: "block",
-                  marginBottom: "8px"
+                  padding: "16px",
+                  borderRadius: "12px",
+                  border:
+                    depth === "quick"
+                      ? "2px solid #2563eb"
+                      : "1px solid #dbe3ef",
+                  background:
+                    depth === "quick" ? "#eff6ff" : "white",
+                  color: "#1e3a8a",
+                  cursor: "pointer",
+                  textAlign: "left"
                 }}
               >
-                Topic
-              </span>
+                <div style={{ display: "flex", alignItems: "center", gap: "8px", fontWeight: "bold" }}>
+                  <Zap size={19} color="#2563eb" />
+                  Quick Answer
+                </div>
+                <div style={{ marginTop: "7px", fontSize: "13px", color: "#64748b" }}>
+                  Short, direct answers with key points.
+                </div>
+              </button>
 
-              <input
-                value={topic}
-                onChange={(e) => setTopic(e.target.value)}
-                placeholder="e.g. Heart failure"
-                style={fieldStyle}
-              />
-            </label>
+              <button
+                type="button"
+                onClick={() => setDepth("deep")}
+                style={{
+                  padding: "16px",
+                  border:
+                    depth === "deep"
+                      ? "2px solid #2563eb"
+                      : "1px solid #dbe3ef",
+                  borderRadius: "12px",
+                  background:
+                    depth === "deep" ? "#eff6ff" : "white",
+                  color: "#1e3a8a",
+                  cursor: "pointer",
+                  textAlign: "left"
+                }}
+              >
+                <div style={{ display: "flex", alignItems: "center", gap: "8px", fontWeight: "bold" }}>
+                  <BookOpen size={19} color="#2563eb" />
+                  Deep Explanation
+                </div>
+                <div style={{ marginTop: "7px", fontSize: "13px", color: "#64748b" }}>
+                  Step-by-step explanations, WHY, and clinical links.
+                </div>
+              </button>
+            </div>
           </div>
 
           <div
@@ -336,9 +343,7 @@ export default function Tutor({ onBack }) {
                 }}
               >
                 <Brain size={38} color="#93c5fd" />
-                <p>
-                  What would you like to understand today?
-                </p>
+                <p>What would you like to understand today?</p>
               </div>
             )}
 
@@ -397,20 +402,12 @@ export default function Tutor({ onBack }) {
           </div>
 
           {error && (
-            <p
-              style={{
-                color: "#dc2626",
-                fontSize: "14px"
-              }}
-            >
+            <p style={{ color: "#dc2626", fontSize: "14px" }}>
               {error}
             </p>
           )}
 
-          <form
-            onSubmit={askAI}
-            style={{ marginTop: "20px" }}
-          >
+          <form onSubmit={askAI} style={{ marginTop: "20px" }}>
             <textarea
               value={question}
               onChange={(e) => setQuestion(e.target.value)}
