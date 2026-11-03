@@ -198,7 +198,7 @@ export default function Tutor({ onBack }) {
         minHeight: "100vh",
         background: "#f5f7fb",
         padding: "25px 16px",
-        fontFamily: "Arial, sans-serif",
+        fontFamily: "Cairo, sans-serif",
         color: "#172554"
       }}
     >
@@ -411,13 +411,31 @@ export default function Tutor({ onBack }) {
             <textarea
               value={question}
               onChange={(e) => setQuestion(e.target.value)}
+              onKeyDown={(e) => {
+                const isTouchDevice =
+                  "ontouchstart" in window ||
+                  navigator.maxTouchPoints > 0;
+
+                if (
+                  e.key === "Enter" &&
+                  !e.shiftKey &&
+                  !isTouchDevice
+                ) {
+                  e.preventDefault();
+
+                  if (question.trim() && !loading) {
+                    e.currentTarget.form.requestSubmit();
+                  }
+                }
+              }}
               placeholder="Ask your medical question..."
               rows={4}
               style={{
                 ...fieldStyle,
                 resize: "vertical",
                 width: "100%",
-                boxSizing: "border-box"
+                boxSizing: "border-box",
+                fontFamily: "Cairo, sans-serif"
               }}
             />
 
