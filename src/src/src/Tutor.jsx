@@ -1,5 +1,5 @@
 
-import React, { useState } from "react";
+import React, { useState, useEffect, useRef } from "react";
 import {
   ArrowLeft,
   Brain,
@@ -134,6 +134,15 @@ export default function Tutor({ onBack }) {
   const [messages, setMessages] = useState([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
+
+  const bottomRef = useRef(null);
+
+  useEffect(() => {
+    bottomRef.current?.scrollIntoView({
+      behavior: "smooth",
+      block: "end"
+    });
+  }, [messages, loading]);
 
   const API_URL =
     "https://medmind-ai.mohamedradey2hh0.workers.dev/";
@@ -400,6 +409,8 @@ export default function Tutor({ onBack }) {
                 MedMind is thinking...
               </div>
             )}
+
+            <div ref={bottomRef} />
           </div>
 
           {error && (
