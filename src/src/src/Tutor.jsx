@@ -149,23 +149,24 @@ export default function Tutor({ onBack }) {
       .reverse()
       .find((message) => message.role === "user");
 
-    const searchTerm = [
-      subject,
-      topic,
-      previousUserMessage?.text || "",
-      "medical anatomy"
-    ].filter(Boolean).join(" ");
+    const searchTerm = topic.trim()
+      ? `${topic.trim()} medical diagram`
+      : `${previousUserMessage?.text || subject} medical illustration`;
 
     setVisualResults((prev) => ({
       ...prev,
-      [messageIndex]: { loading: true, images: [], error: "" }
+      [messageIndex]: {
+        loading: true,
+        images: [],
+        error: ""
+      }
     }));
 
     try {
       const params = new URLSearchParams({
         action: "query",
         generator: "search",
-        gsrsearch: searchTerm + " filetype:bitmap",
+        gsrsearch: searchTerm,
         gsrnamespace: "6",
         gsrlimit: "6",
         prop: "imageinfo",
@@ -209,7 +210,7 @@ export default function Tutor({ onBack }) {
           images,
           error: images.length
             ? ""
-            : "No suitable images found. Try a more specific topic."
+            : "No suitable images found. Try another topic."
         }
       }));
     } catch (err) {
@@ -248,7 +249,9 @@ export default function Tutor({ onBack }) {
     try {
       const response = await fetch(API_URL, {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: {
+          "Content-Type": "application/json"
+        },
         body: JSON.stringify({
           subject,
           topic,
@@ -447,7 +450,6 @@ export default function Tutor({ onBack }) {
                                 overflow: "hidden"
                               }}
                             >
-                              {/* الضغط على الصورة يفتح ملف الصورة نفسه */}
                               <a
                                 href={image.image}
                                 target="_blank"
