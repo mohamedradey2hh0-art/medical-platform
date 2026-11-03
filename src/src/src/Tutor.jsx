@@ -1,5 +1,5 @@
 
-import React, { useState, useRef, useEffect } from "react";
+import React, { useState, useRef } from "react";
 import {
   ArrowLeft,
   Brain,
@@ -9,7 +9,8 @@ import {
   BookOpen,
   Camera,
   Image as ImageIcon,
-  X
+  X,
+  MessageCircle
 } from "lucide-react";
 
 function formatInline(text) {
@@ -131,8 +132,7 @@ function fileToBase64(file) {
     const reader = new FileReader();
 
     reader.onload = () => {
-      const result = reader.result;
-      resolve(String(result).split(",")[1]);
+      resolve(String(reader.result).split(",")[1]);
     };
 
     reader.onerror = () => reject(new Error("Could not read the image."));
@@ -148,20 +148,16 @@ export default function Tutor({ onBack }) {
   const [error, setError] = useState("");
   const [selectedImage, setSelectedImage] = useState(null);
 
+  // Ask MedMind selection state
+  const [textSelection, setTextSelection] = useState(null);
+
   const questionStartRef = useRef(null);
+  const textareaRef = useRef(null);
   const galleryInputRef = useRef(null);
   const cameraInputRef = useRef(null);
 
   const API_URL =
     "https://medmind-ai.mohamedradey2hh0.workers.dev/";
-
-  useEffect(() => {
-    return () => {
-      if (selectedImage?.preview) {
-        URL.revokeObjectURL(selectedImage.preview);
-      }
-    };
-  }, [selectedImage]);
 
   function scrollToNewQuestion() {
     setTimeout(() => {
@@ -170,6 +166,69 @@ export default function Tutor({ onBack }) {
         block: "start"
       });
     }, 200);
+  }
+
+  // Detect selected text inside MedMind's answers
+  function handleTextSelection(e) {
+    const selection = window.getSelection();
+
+    if (!selection || selection.isCollapsed) {
+      setTextSelection(null);
+      return;
+    }
+
+    const selectedText = selection.toString().trim();
+
+    if (!selectedText) {
+      setTextSelection(null);
+      return;
+    }
+
+    const selectedNode = selection.getRangeAt(0).commonAncestorContainer;
+
+    if (!e.currentTarget.contains(selectedNode)) {
+      setTextSelection(null);
+      return;
+    }
+
+    const rect = selection.getRangeAt(0).getBoundingClientRect();
+
+    if (!rect.width && !rect.height) {
+      setTextSelection(null);
+      return;
+    }
+
+    setTextSelection({
+      text: selectedText,
+      top: Math.max(8, rect.top - 48),
+      left: Math.min(
+        Math.max(8, rect.left + rect.width / 2 - 65),
+        window.innerWidth - 140
+      )
+    });
+  }
+
+  // Put selected text into the question box
+  function askAboutSelection() {
+    if (!textSelection?.text) return;
+
+    const selectedText = textSelection.text;
+
+    setQuestion(
+      `Please explain this selected part in simple terms, step by step, and relate it to the previous explanation:\n\n"${selectedText}"`
+    );
+
+    setTextSelection(null);
+
+    window.getSelection()?.removeAllRanges();
+
+    setTimeout(() => {
+      textareaRef.current?.focus();
+      textareaRef.current?.scrollIntoView({
+        behavior: "smooth",
+        block: "center"
+      });
+    }, 100);
   }
 
   function handleImageSelect(e) {
@@ -186,6 +245,10 @@ export default function Tutor({ onBack }) {
     if (file.size > 5 * 1024 * 1024) {
       setError("Image size must be 5 MB or less.");
       return;
+    }
+
+    if (selectedImage?.preview) {
+      URL.revokeObjectURL(selectedImage.preview);
     }
 
     setError("");
@@ -232,6 +295,7 @@ export default function Tutor({ onBack }) {
 
     setQuestion("");
     setSelectedImage(null);
+    setTextSelection(null);
     setLoading(true);
     setError("");
     scrollToNewQuestion();
@@ -285,6 +349,14 @@ export default function Tutor({ onBack }) {
 
   return (
     <div
+      onClick={(e) => {
+        if (
+          textSelection &&
+          !e.target.closest(".ask-selection-button")
+        ) {
+          setTextSelection(null);
+        }
+      }}
       style={{
         minHeight: "100vh",
         background: "#f5f7fb",
@@ -293,8 +365,39 @@ export default function Tutor({ onBack }) {
         color: "#172554"
       }}
     >
-      <div style={{ maxWidth: "850px", margin: "auto" }}>
+      {/* Floating Ask MedMind button */}
+      {textSelection && (
+        <button
+          type="button"
+          className="ask-selection-button"
+          onMouseDown={(e) => e.preventDefault()}
+          onClick={askAboutSelection}
+          style={{
+            position: "fixed",
+            top: textSelection.top,
+            left: textSelection.left,
+            zIndex: 9999,
+            background: "#1d4ed8",
+            color: "white",
+            border: "none",
+            borderRadius: "9px",
+            padding: "9px 13px",
+            display: "flex",
+            alignItems: "center",
+            gap: "7px",
+            fontSize: "13px",
+            fontWeight: "bold",
+            boxShadow: "0 4px 15px #00000025",
+            cursor: "pointer",
+            whiteSpace: "nowrap"
+          }}
+        >
+          <MessageCircle size={16} />
+          Ask MedMind
+        </button>
+      )}
 
+      <div style={{ maxWidth: "850px", margin: "auto" }}>
         <button
           onClick={onBack}
           style={{
@@ -445,6 +548,16 @@ export default function Tutor({ onBack }) {
                   overflowWrap: "anywhere",
                   fontFamily: "Cairo, sans-serif"
                 }}
+                onMouseUp={
+                  message.role === "assistant"
+                    ? handleTextSelection
+                    : undefined
+                }
+                onTouchEnd={
+                  message.role === "assistant"
+                    ? handleTextSelection
+                    : undefined
+                }
               >
                 {message.imagePreview && (
                   <img
@@ -495,7 +608,6 @@ export default function Tutor({ onBack }) {
           )}
 
           <form onSubmit={askAI} style={{ marginTop: "20px" }}>
-
             {selectedImage && (
               <div
                 style={{
@@ -549,6 +661,7 @@ export default function Tutor({ onBack }) {
             )}
 
             <textarea
+              ref={textareaRef}
               value={question}
               onChange={(e) => setQuestion(e.target.value)}
               onKeyDown={(e) => {
