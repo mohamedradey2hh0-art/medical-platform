@@ -2,6 +2,123 @@
 import React, { useState } from "react";
 import { ArrowLeft, Brain, Send, BookOpen, Loader2 } from "lucide-react";
 
+function formatInline(text) {
+  const parts = text.split(/(\*\*.*?\*\*)/g);
+
+  return parts.map((part, index) => {
+    if (part.startsWith("**") && part.endsWith("**")) {
+      return <strong key={index}>{part.slice(2, -2)}</strong>;
+    }
+    return part;
+  });
+}
+
+function isArabic(text) {
+  return /[\u0600-\u06FF]/.test(text);
+}
+
+function FormattedAnswer({ text }) {
+  const lines = text.split("\n");
+  const elements = [];
+  let listItems = [];
+  let listType = null;
+
+  function flushList() {
+    if (!listItems.length) return;
+
+    const ListTag = listType === "number" ? "ol" : "ul";
+
+    elements.push(
+      <ListTag
+        key={`list-${elements.length}`}
+        style={{
+          paddingInlineStart: "25px",
+          margin: "8px 0 14px",
+          lineHeight: 1.8
+        }}
+      >
+        {listItems.map((item, index) => (
+          <li key={index} style={{ paddingInlineStart: "4px" }}>
+            {formatInline(item)}
+          </li>
+        ))}
+      </ListTag>
+    );
+
+    listItems = [];
+    listType = null;
+  }
+
+  lines.forEach((line, index) => {
+    const trimmed = line.trim();
+
+    if (!trimmed) {
+      flushList();
+      return;
+    }
+
+    const bullet = trimmed.match(/^[-*•]\s+(.+)/);
+    const numbered = trimmed.match(/^\d+[.)]\s+(.+)/);
+
+    if (bullet || numbered) {
+      const currentType = numbered ? "number" : "bullet";
+
+      if (listType && listType !== currentType) {
+        flushList();
+      }
+
+      listType = currentType;
+      listItems.push((bullet || numbered)[1]);
+      return;
+    }
+
+    flushList();
+
+    const heading = trimmed.match(/^(#{1,3})\s+(.+)/);
+
+    if (heading) {
+      const level = heading[1].length;
+      const HeadingTag = level === 1 ? "h2" : level === 2 ? "h3" : "h4";
+
+      elements.push(
+        <HeadingTag
+          key={index}
+          style={{
+            color: "#1e40af",
+            margin: "18px 0 8px",
+            fontSize: level === 1 ? "21px" : level === 2 ? "18px" : "16px",
+            lineHeight: 1.5
+          }}
+        >
+          {formatInline(heading[2])}
+        </HeadingTag>
+      );
+      return;
+    }
+
+    const arabic = isArabic(trimmed);
+
+    elements.push(
+      <p
+        key={index}
+        dir={arabic ? "rtl" : "auto"}
+        style={{
+          margin: "7px 0 12px",
+          textAlign: arabic ? "right" : "left",
+          lineHeight: 1.85,
+          fontSize: "15px"
+        }}
+      >
+        {formatInline(trimmed)}
+      </p>
+    );
+  });
+
+  flushList();
+
+  return <div>{elements}</div>;
+}
+
 export default function Tutor({ onBack }) {
   const [subject, setSubject] = useState("Anatomy");
   const [topic, setTopic] = useState("");
@@ -94,7 +211,9 @@ export default function Tutor({ onBack }) {
             marginBottom: "10px"
           }}>
             <Brain size={32} color="#2563eb" />
-            <h1 style={{ margin: 0, fontSize: "26px" }}>Medical AI Tutor</h1>
+            <h1 style={{ margin: 0, fontSize: "26px" }}>
+              Medical AI Tutor
+            </h1>
           </div>
 
           <p style={{ color: "#64748b", lineHeight: 1.6 }}>
@@ -112,6 +231,7 @@ export default function Tutor({ onBack }) {
               <span style={{ display: "block", marginBottom: "8px" }}>
                 <BookOpen size={15} style={{ verticalAlign: "middle" }} /> Subject
               </span>
+
               <select
                 value={subject}
                 onChange={(e) => setSubject(e.target.value)}
@@ -127,7 +247,10 @@ export default function Tutor({ onBack }) {
             </label>
 
             <label>
-              <span style={{ display: "block", marginBottom: "8px" }}>Topic</span>
+              <span style={{ display: "block", marginBottom: "8px" }}>
+                Topic
+              </span>
+
               <input
                 value={topic}
                 onChange={(e) => setTopic(e.target.value)}
@@ -140,7 +263,7 @@ export default function Tutor({ onBack }) {
           <div style={{
             marginTop: "25px",
             minHeight: "180px",
-            maxHeight: "450px",
+            maxHeight: "550px",
             overflowY: "auto",
             display: "flex",
             flexDirection: "column",
@@ -161,23 +284,35 @@ export default function Tutor({ onBack }) {
               <div
                 key={index}
                 style={{
-                  alignSelf: message.role === "user" ? "flex-end" : "flex-start",
-                  background: message.role === "user" ? "#2563eb" : "#eff6ff",
+                  alignSelf: message.role === "user" ? "flex-end" : "stretch",
+                  background: message.role === "user" ? "#2563eb" : "#f8fafc",
                   color: message.role === "user" ? "white" : "#1e293b",
                   padding: "14px 17px",
                   borderRadius: "14px",
-                  maxWidth: "90%",
+                  maxWidth: message.role === "user" ? "90%" : "100%",
+                  border: message.role === "assistant" ? "1px solid #e2e8f0" : "none",
                   lineHeight: 1.7,
-                  whiteSpace: "pre-wrap",
                   overflowWrap: "anywhere"
                 }}
               >
-                {message.text}
+                {message.role === "assistant" ? (
+                  <FormattedAnswer text={message.text} />
+                ) : (
+                  <div style={{ whiteSpace: "pre-wrap" }}>
+                    {message.text}
+                  </div>
+                )}
               </div>
             ))}
 
             {loading && (
-              <div style={{ color: "#2563eb", padding: "10px" }}>
+              <div style={{
+                color: "#2563eb",
+                padding: "10px",
+                display: "flex",
+                alignItems: "center",
+                gap: "8px"
+              }}>
                 <Loader2 size={18} className="animate-spin" />
                 MedMind is thinking...
               </div>
@@ -185,7 +320,9 @@ export default function Tutor({ onBack }) {
           </div>
 
           {error && (
-            <p style={{ color: "#dc2626", fontSize: "14px" }}>{error}</p>
+            <p style={{ color: "#dc2626", fontSize: "14px" }}>
+              {error}
+            </p>
           )}
 
           <form onSubmit={askAI} style={{ marginTop: "20px" }}>
