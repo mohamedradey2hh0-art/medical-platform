@@ -1,3 +1,4 @@
+
 import React, { useState, useRef } from "react";
 import {
   ArrowLeft,
@@ -126,6 +127,81 @@ function FormattedAnswer({ text }) {
   return <div>{elements}</div>;
 }
 
+// Automatically optimize images before sending them.
+async function compressImage(file) {
+  if (!file.type.startsWith("image/")) return file;
+
+  try {
+    const bitmap = await createImageBitmap(file);
+
+    const MAX_DIMENSION = 2200;
+
+    const scale = Math.min(
+      1,
+      MAX_DIMENSION / Math.max(bitmap.width, bitmap.height)
+    );
+
+    // Keep small PNG images unchanged.
+    if (scale === 1 && file.type === "image/png") {
+      bitmap.close();
+      return file;
+    }
+
+    const canvas = document.createElement("canvas");
+
+    canvas.width = Math.round(bitmap.width * scale);
+    canvas.height = Math.round(bitmap.height * scale);
+
+    const ctx = canvas.getContext("2d");
+
+    if (!ctx) {
+      bitmap.close();
+      return file;
+    }
+
+    ctx.drawImage(
+      bitmap,
+      0,
+      0,
+      canvas.width,
+      canvas.height
+    );
+
+    bitmap.close();
+
+    // Preserve PNG format for diagrams and text.
+    // Convert other supported images to JPEG.
+    const outputType =
+      file.type === "image/png"
+        ? "image/png"
+        : "image/jpeg";
+
+    const blob = await new Promise((resolve) => {
+      canvas.toBlob(
+        resolve,
+        outputType,
+        outputType === "image/jpeg" ? 0.92 : undefined
+      );
+    });
+
+    if (!blob || blob.size >= file.size) {
+      return file;
+    }
+
+    return new File(
+      [blob],
+      outputType === "image/jpeg"
+        ? "medmind-image.jpg"
+        : file.name,
+      { type: outputType }
+    );
+
+  } catch (error) {
+    console.warn("Image compression skipped:", error);
+    return file;
+  }
+}
+
 function fileToBase64(file) {
   return new Promise((resolve, reject) => {
     const reader = new FileReader();
@@ -134,7 +210,10 @@ function fileToBase64(file) {
       resolve(String(reader.result).split(",")[1]);
     };
 
-    reader.onerror = () => reject(new Error("Could not read the image."));
+    reader.onerror = () => {
+      reject(new Error("Could not read the image."));
+    };
+
     reader.readAsDataURL(file);
   });
 }
@@ -166,7 +245,6 @@ export default function Tutor({ onBack }) {
     }, 200);
   }
 
-  // Detect selected text inside MedMind answers
   function handleTextSelection(e) {
     const selection = window.getSelection();
 
@@ -182,14 +260,16 @@ export default function Tutor({ onBack }) {
       return;
     }
 
-    const selectedNode = selection.getRangeAt(0).commonAncestorContainer;
+    const selectedNode =
+      selection.getRangeAt(0).commonAncestorContainer;
 
     if (!e.currentTarget.contains(selectedNode)) {
       setTextSelection(null);
       return;
     }
 
-    const rect = selection.getRangeAt(0).getBoundingClientRect();
+    const rect =
+      selection.getRangeAt(0).getBoundingClientRect();
 
     if (!rect.width && !rect.height) {
       setTextSelection(null);
@@ -206,7 +286,6 @@ export default function Tutor({ onBack }) {
     });
   }
 
-  // Ask about selected text
   function askAboutSelection() {
     if (!textSelection?.text) return;
 
@@ -265,7 +344,6 @@ export default function Tutor({ onBack }) {
     setSelectedImage(null);
   }
 
-  // Streaming AI response
   async function askAI(e) {
     e.preventDefault();
 
@@ -296,6 +374,7 @@ export default function Tutor({ onBack }) {
     setTextSelection(null);
     setLoading(true);
     setError("");
+
     scrollToNewQuestion();
 
     let assistantId = null;
@@ -305,8 +384,13 @@ export default function Tutor({ onBack }) {
       let imageMimeType = null;
 
       if (imageForRequest) {
-        imageData = await fileToBase64(imageForRequest.file);
-        imageMimeType = imageForRequest.file.type;
+        // Compress automatically before uploading.
+        const optimizedImage = await compressImage(
+          imageForRequest.file
+        );
+
+        imageData = await fileToBase64(optimizedImage);
+        imageMimeType = optimizedImage.type;
       }
 
       const response = await fetch(API_URL, {
@@ -335,7 +419,9 @@ export default function Tutor({ onBack }) {
       }
 
       if (!response.body) {
-        throw new Error("Streaming is not supported by this connection.");
+        throw new Error(
+          "Streaming is not supported by this connection."
+        );
       }
 
       assistantId = `assistant-${Date.now()}-${Math.random()}`;
@@ -383,7 +469,8 @@ export default function Tutor({ onBack }) {
 
         if (eventName === "error" || eventData.error) {
           throw new Error(
-            eventData.error || "The response stream was interrupted."
+            eventData.error ||
+            "The response stream was interrupted."
           );
         }
 
@@ -468,7 +555,6 @@ export default function Tutor({ onBack }) {
         color: "#172554"
       }}
     >
-      {/* Floating Ask MedMind button */}
       {textSelection && (
         <button
           type="button"
@@ -543,7 +629,6 @@ export default function Tutor({ onBack }) {
             Ask questions and learn in your own way.
           </p>
 
-          {/* Explanation depth */}
           <div style={{ marginTop: "25px" }}>
             <label
               style={{
@@ -632,7 +717,6 @@ export default function Tutor({ onBack }) {
             </div>
           </div>
 
-          {/* Conversation */}
           <div
             style={{
               marginTop: "25px",
@@ -729,20 +813,21 @@ export default function Tutor({ onBack }) {
               </div>
             ))}
 
-            {loading && messages[messages.length - 1]?.role !== "assistant" && (
-              <div
-                style={{
-                  color: "#2563eb",
-                  padding: "10px",
-                  display: "flex",
-                  alignItems: "center",
-                  gap: "8px"
-                }}
-              >
-                <Loader2 size={18} />
-                MedMind is thinking...
-              </div>
-            )}
+            {loading &&
+              messages[messages.length - 1]?.role !== "assistant" && (
+                <div
+                  style={{
+                    color: "#2563eb",
+                    padding: "10px",
+                    display: "flex",
+                    alignItems: "center",
+                    gap: "8px"
+                  }}
+                >
+                  <Loader2 size={18} />
+                  MedMind is thinking...
+                </div>
+              )}
           </div>
 
           {error && (
@@ -751,7 +836,6 @@ export default function Tutor({ onBack }) {
             </p>
           )}
 
-          {/* Question form */}
           <form onSubmit={askAI} style={{ marginTop: "20px" }}>
             {selectedImage && (
               <div
@@ -888,7 +972,10 @@ export default function Tutor({ onBack }) {
                   borderRadius: "12px",
                   padding: "13px 22px",
                   cursor: "pointer",
-                  opacity: loading || (!question.trim() && !selectedImage) ? 0.6 : 1,
+                  opacity:
+                    loading || (!question.trim() && !selectedImage)
+                      ? 0.6
+                      : 1,
                   display: "flex",
                   alignItems: "center",
                   gap: "8px"
