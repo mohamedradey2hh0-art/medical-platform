@@ -1,198 +1,250 @@
 
-
-import { useState } from "react";
-import { ArrowRight, Brain, Send, BookOpen } from "lucide-react";
+import React, { useState } from "react";
+import { ArrowLeft, Brain, Send, BookOpen, Loader2 } from "lucide-react";
 
 export default function Tutor({ onBack }) {
-  const [subject, setSubject] = useState("");
+  const [subject, setSubject] = useState("Anatomy");
   const [topic, setTopic] = useState("");
   const [question, setQuestion] = useState("");
+  const [messages, setMessages] = useState([]);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState("");
 
-  const subjects = [
-    "Anatomy",
-    "Physiology",
-    "Biochemistry",
-    "Pathology",
-    "Pharmacology",
-    "Internal Medicine",
-    "Surgery",
-    "Pediatrics",
-    "Ophthalmology",
-    "ENT",
-    "Other",
-  ];
+  const API_URL = "https://medmind-ai.mohamedradey2hh0.workers.dev/";
+
+  async function askAI(e) {
+    e.preventDefault();
+
+    if (!question.trim() || loading) return;
+
+    const currentQuestion = question.trim();
+
+    setMessages((prev) => [
+      ...prev,
+      { role: "user", text: currentQuestion }
+    ]);
+
+    setQuestion("");
+    setLoading(true);
+    setError("");
+
+    try {
+      const response = await fetch(API_URL, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          subject,
+          topic,
+          question: currentQuestion
+        })
+      });
+
+      const data = await response.json();
+
+      if (!response.ok) {
+        throw new Error(data.error || "Something went wrong.");
+      }
+
+      setMessages((prev) => [
+        ...prev,
+        { role: "assistant", text: data.answer }
+      ]);
+    } catch (err) {
+      setError(err.message || "Connection failed. Please try again.");
+    } finally {
+      setLoading(false);
+    }
+  }
 
   return (
-    <div
-      dir="rtl"
-      style={{
-        minHeight: "100vh",
-        background: "#F6F9FC",
-        color: "#172B4D",
-        fontFamily: "Cairo, sans-serif",
-        padding: "25px 16px",
-      }}
-    >
-      <div style={{ maxWidth: 900, margin: "auto" }}>
+    <div style={{
+      minHeight: "100vh",
+      background: "#f5f7fb",
+      padding: "25px 16px",
+      fontFamily: "Arial, sans-serif",
+      color: "#172554"
+    }}>
+      <div style={{ maxWidth: "850px", margin: "auto" }}>
 
         <button
           onClick={onBack}
           style={{
-            display: "flex",
-            alignItems: "center",
-            gap: 8,
-            border: "1px solid #E5EAF0",
+            border: "none",
             background: "white",
-            color: "#087E78",
-            borderRadius: 10,
-            padding: "10px 16px",
+            padding: "12px 18px",
+            borderRadius: "12px",
             cursor: "pointer",
-            fontFamily: "inherit",
-            fontWeight: 700,
+            marginBottom: "25px",
+            color: "#1e3a8a"
           }}
         >
-          <ArrowRight size={18} />
-          العودة إلى الرئيسية
+          <ArrowLeft size={17} style={{ verticalAlign: "middle" }} /> Back
         </button>
 
-        <section
-          style={{
-            marginTop: 25,
-            background: "linear-gradient(120deg, #087E78, #075B63)",
-            color: "white",
-            borderRadius: 22,
-            padding: "30px 25px",
-          }}
-        >
-          <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
-            <Brain size={38} />
-            <div>
-              <h1 style={{ margin: 0, fontSize: 26 }}>
-                المساعد الطبي الذكي
-              </h1>
-              <p style={{ margin: "7px 0 0", color: "#D9F3EF" }}>
-                Medical AI Tutor
-              </p>
-            </div>
+        <div style={{
+          background: "white",
+          padding: "25px",
+          borderRadius: "18px",
+          boxShadow: "0 5px 25px #00000008"
+        }}>
+          <div style={{
+            display: "flex",
+            alignItems: "center",
+            gap: "12px",
+            marginBottom: "10px"
+          }}>
+            <Brain size={32} color="#2563eb" />
+            <h1 style={{ margin: 0, fontSize: "26px" }}>Medical AI Tutor</h1>
           </div>
 
-          <p style={{ lineHeight: 2, color: "#E0F2F1", marginBottom: 0 }}>
-            اسأل، افهم، وتعلّم الطب بطريقة تناسب مستواك.
+          <p style={{ color: "#64748b", lineHeight: 1.6 }}>
+            Your intelligent medical learning companion.
+            Ask questions, understand concepts, and learn step by step.
           </p>
-        </section>
 
-        <section
-          style={{
-            background: "white",
-            border: "1px solid #E5EAF0",
-            borderRadius: 18,
-            padding: 25,
-            marginTop: 22,
-          }}
-        >
-          <h2 style={{ fontSize: 21, marginTop: 0 }}>
-            <BookOpen
-              size={21}
-              style={{ verticalAlign: "middle", marginLeft: 8 }}
-            />
-            ابدأ سؤالك
-          </h2>
+          <div style={{
+            display: "grid",
+            gridTemplateColumns: "repeat(auto-fit, minmax(200px, 1fr))",
+            gap: "15px",
+            marginTop: "25px"
+          }}>
+            <label>
+              <span style={{ display: "block", marginBottom: "8px" }}>
+                <BookOpen size={15} style={{ verticalAlign: "middle" }} /> Subject
+              </span>
+              <select
+                value={subject}
+                onChange={(e) => setSubject(e.target.value)}
+                style={fieldStyle}
+              >
+                {[
+                  "Anatomy", "Physiology", "Biochemistry",
+                  "Pathology", "Pharmacology", "Internal Medicine",
+                  "Surgery", "Pediatrics", "Ophthalmology",
+                  "ENT", "Other"
+                ].map((s) => <option key={s}>{s}</option>)}
+              </select>
+            </label>
 
-          <label style={labelStyle}>اختر المادة الطبية</label>
+            <label>
+              <span style={{ display: "block", marginBottom: "8px" }}>Topic</span>
+              <input
+                value={topic}
+                onChange={(e) => setTopic(e.target.value)}
+                placeholder="e.g. Heart failure"
+                style={fieldStyle}
+              />
+            </label>
+          </div>
 
-          <select
-            value={subject}
-            onChange={(e) => setSubject(e.target.value)}
-            style={fieldStyle}
-          >
-            <option value="">اختر المادة...</option>
-            {subjects.map((item) => (
-              <option key={item} value={item}>
-                {item}
-              </option>
+          <div style={{
+            marginTop: "25px",
+            minHeight: "180px",
+            maxHeight: "450px",
+            overflowY: "auto",
+            display: "flex",
+            flexDirection: "column",
+            gap: "14px"
+          }}>
+            {messages.length === 0 && (
+              <div style={{
+                textAlign: "center",
+                padding: "35px 10px",
+                color: "#64748b"
+              }}>
+                <Brain size={38} color="#93c5fd" />
+                <p>What would you like to understand today?</p>
+              </div>
+            )}
+
+            {messages.map((message, index) => (
+              <div
+                key={index}
+                style={{
+                  alignSelf: message.role === "user" ? "flex-end" : "flex-start",
+                  background: message.role === "user" ? "#2563eb" : "#eff6ff",
+                  color: message.role === "user" ? "white" : "#1e293b",
+                  padding: "14px 17px",
+                  borderRadius: "14px",
+                  maxWidth: "90%",
+                  lineHeight: 1.7,
+                  whiteSpace: "pre-wrap",
+                  overflowWrap: "anywhere"
+                }}
+              >
+                {message.text}
+              </div>
             ))}
-          </select>
 
-          <label style={labelStyle}>الموضوع (اختياري)</label>
+            {loading && (
+              <div style={{ color: "#2563eb", padding: "10px" }}>
+                <Loader2 size={18} className="animate-spin" />
+                MedMind is thinking...
+              </div>
+            )}
+          </div>
 
-          <input
-            value={topic}
-            onChange={(e) => setTopic(e.target.value)}
-            placeholder="مثلاً: Heart Failure"
-            style={fieldStyle}
-          />
+          {error && (
+            <p style={{ color: "#dc2626", fontSize: "14px" }}>{error}</p>
+          )}
 
-          <label style={labelStyle}>اكتب سؤالك</label>
+          <form onSubmit={askAI} style={{ marginTop: "20px" }}>
+            <textarea
+              value={question}
+              onChange={(e) => setQuestion(e.target.value)}
+              placeholder="Ask your medical question..."
+              rows={4}
+              style={{
+                ...fieldStyle,
+                resize: "vertical",
+                width: "100%",
+                boxSizing: "border-box"
+              }}
+            />
 
-          <textarea
-            value={question}
-            onChange={(e) => setQuestion(e.target.value)}
-            placeholder="اشرح لي الموضوع أو اسأل عن نقطة مش واضحة..."
-            rows={5}
-            style={{ ...fieldStyle, resize: "vertical" }}
-          />
+            <button
+              type="submit"
+              disabled={loading || !question.trim()}
+              style={{
+                marginTop: "12px",
+                background: "#2563eb",
+                color: "white",
+                border: "none",
+                borderRadius: "12px",
+                padding: "13px 22px",
+                cursor: "pointer",
+                opacity: loading || !question.trim() ? 0.6 : 1,
+                display: "flex",
+                alignItems: "center",
+                gap: "8px"
+              }}
+            >
+              <Send size={17} /> Ask MedMind
+            </button>
+          </form>
 
-          <button
-            onClick={() =>
-              alert(
-                "واجهة المساعد جاهزة! سنربط الذكاء الاصطناعي في المرحلة القادمة."
-              )
-            }
-            disabled={!question.trim()}
-            style={{
-              width: "100%",
-              padding: 15,
-              border: 0,
-              borderRadius: 11,
-              background: question.trim() ? "#087E78" : "#A7C7C3",
-              color: "white",
-              fontSize: 16,
-              fontWeight: 800,
-              fontFamily: "inherit",
-              cursor: question.trim() ? "pointer" : "not-allowed",
-              display: "flex",
-              alignItems: "center",
-              justifyContent: "center",
-              gap: 9,
-            }}
-          >
-            <Send size={18} />
-            ابدأ المحادثة
-          </button>
-
-          <p
-            style={{
-              fontSize: 12,
-              color: "#94A3B8",
-              textAlign: "center",
-              marginBottom: 0,
-            }}
-          >
-            المساعد ما زال في مرحلة التطوير، ولا يقدم تشخيصًا طبيًا.
+          <p style={{
+            color: "#94a3b8",
+            fontSize: "12px",
+            marginTop: "20px",
+            lineHeight: 1.5
+          }}>
+            Educational use only. Always verify medical information
+            and consult qualified healthcare professionals when needed.
           </p>
-        </section>
-
+        </div>
       </div>
     </div>
   );
 }
 
-const labelStyle = {
-  display: "block",
-  marginBottom: 8,
-  fontWeight: 700,
-  fontSize: 14,
-};
-
 const fieldStyle = {
-  display: "block",
   width: "100%",
-  padding: 13,
-  marginBottom: 20,
-  border: "1px solid #D5DCE5",
-  borderRadius: 9,
-  fontSize: 15,
-  fontFamily: "inherit",
-  background: "white",
   boxSizing: "border-box",
+  padding: "13px",
+  border: "1px solid #dbe3ef",
+  borderRadius: "10px",
+  background: "white",
+  fontSize: "15px",
+  outline: "none"
 };
