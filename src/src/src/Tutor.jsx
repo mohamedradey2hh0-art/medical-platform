@@ -372,7 +372,8 @@ export default function Tutor({ onBack }) {
                       ? "1px solid #e2e8f0"
                       : "none",
                   lineHeight: 1.7,
-                  overflowWrap: "anywhere"
+                  overflowWrap: "anywhere",
+                  fontFamily: "Cairo, sans-serif"
                 }}
               >
                 {message.role === "assistant" ? (
@@ -412,15 +413,7 @@ export default function Tutor({ onBack }) {
               value={question}
               onChange={(e) => setQuestion(e.target.value)}
               onKeyDown={(e) => {
-                const isTouchDevice =
-                  "ontouchstart" in window ||
-                  navigator.maxTouchPoints > 0;
-
-                if (
-                  e.key === "Enter" &&
-                  !e.shiftKey &&
-                  !isTouchDevice
-                ) {
+                if (e.key === "Enter" && !e.shiftKey) {
                   e.preventDefault();
 
                   if (question.trim() && !loading) {
