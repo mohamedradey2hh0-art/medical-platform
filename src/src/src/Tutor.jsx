@@ -1,6 +1,7 @@
 
+
 import React, { useState } from "react";
-import { ArrowLeft, Brain, Send, BookOpen, Loader2 } from "lucide-react";
+import { ArrowLeft, Brain, Send, BookOpen, Loader2, Image as ImageIcon, ExternalLink } from "lucide-react";
 
 function formatInline(text) {
   const parts = text.split(/(\*\*.*?\*\*)/g);
@@ -119,6 +120,11 @@ function FormattedAnswer({ text }) {
   return <div>{elements}</div>;
 }
 
+function cleanMetadata(value) {
+  if (!value) return "";
+  return value.replace(/<[^>]*>/g, "").replace(/&nbsp;/g, " ").trim();
+}
+
 export default function Tutor({ onBack }) {
   const [subject, setSubject] = useState("Anatomy");
   const [topic, setTopic] = useState("");
@@ -126,8 +132,88 @@ export default function Tutor({ onBack }) {
   const [messages, setMessages] = useState([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
+  const [visualResults, setVisualResults] = useState({});
 
   const API_URL = "https://medmind-ai.mohamedradey2hh0.workers.dev/";
+
+  async function loadImages(messageIndex) {
+    const previousUserMessage = [...messages]
+      .slice(0, messageIndex)
+      .reverse()
+      .find((message) => message.role === "user");
+
+    const searchTerm = [
+      subject,
+      topic,
+      previousUserMessage?.text || "",
+      "medical anatomy"
+    ].filter(Boolean).join(" ");
+
+    setVisualResults((prev) => ({
+      ...prev,
+      [messageIndex]: { loading: true, images: [], error: "" }
+    }));
+
+    try {
+      const params = new URLSearchParams({
+        action: "query",
+        generator: "search",
+        gsrsearch: searchTerm + " filetype:bitmap",
+        gsrnamespace: "6",
+        gsrlimit: "6",
+        prop: "imageinfo",
+        iiprop: "url|extmetadata",
+        iiurlwidth: "600",
+        format: "json",
+        origin: "*"
+      });
+
+      const response = await fetch(
+        `https://commons.wikimedia.org/w/api.php?${params.toString()}`
+      );
+
+      if (!response.ok) {
+        throw new Error("Image search failed.");
+      }
+
+      const data = await response.json();
+      const pages = Object.values(data.query?.pages || {});
+
+      const images = pages
+        .filter((page) => page.imageinfo?.[0]?.thumburl)
+        .map((page) => {
+          const info = page.imageinfo[0];
+          const metadata = info.extmetadata || {};
+
+          return {
+            title: page.title.replace("File:", ""),
+            image: info.thumburl,
+            source: info.descriptionurl,
+            license: cleanMetadata(metadata.LicenseShortName?.value),
+            artist: cleanMetadata(metadata.Artist?.value),
+            credit: cleanMetadata(metadata.Credit?.value)
+          };
+        });
+
+      setVisualResults((prev) => ({
+        ...prev,
+        [messageIndex]: {
+          loading: false,
+          images,
+          error: images.length ? "" : "No suitable images found. Try a more specific topic."
+        }
+      }));
+    } catch (err) {
+      setVisualResults((prev) => ({
+        ...prev,
+        [messageIndex]: {
+          loading: false,
+          images: [],
+          error: "Could not load images. Please try again."
+        }
+      }));
+    }
+  }
 
   async function askAI(e) {
     e.preventDefault();
@@ -296,7 +382,105 @@ export default function Tutor({ onBack }) {
                 }}
               >
                 {message.role === "assistant" ? (
-                  <FormattedAnswer text={message.text} />
+                  <>
+                    <FormattedAnswer text={message.text} />
+
+                    <button
+                      onClick={() => loadImages(index)}
+                      disabled={visualResults[index]?.loading}
+                      style={{
+                        marginTop: "12px",
+                        padding: "9px 13px",
+                        border: "1px solid #bfdbfe",
+                        borderRadius: "9px",
+                        background: "#eff6ff",
+                        color: "#1d4ed8",
+                        cursor: "pointer",
+                        display: "inline-flex",
+                        alignItems: "center",
+                        gap: "7px"
+                      }}
+                    >
+                      {visualResults[index]?.loading
+                        ? <Loader2 size={16} />
+                        : <ImageIcon size={16} />}
+                      {visualResults[index]?.loading
+                        ? "Searching images..."
+                        : "Show related images"}
+                    </button>
+
+                    {visualResults[index] && (
+                      <div style={{ marginTop: "15px" }}>
+                        {visualResults[index].error && (
+                          <p style={{ color: "#64748b", fontSize: "13px" }}>
+                            {visualResults[index].error}
+                          </p>
+                        )}
+
+                        <div style={{
+                          display: "grid",
+                          gridTemplateColumns: "repeat(auto-fit, minmax(180px, 1fr))",
+                          gap: "12px"
+                        }}>
+                          {visualResults[index].images.map((image, imageIndex) => (
+                            <div
+                              key={imageIndex}
+                              style={{
+                                background: "white",
+                                border: "1px solid #e2e8f0",
+                                borderRadius: "10px",
+                                overflow: "hidden"
+                              }}
+                            >
+                              <a
+                                href={image.source}
+                                target="_blank"
+                                rel="noreferrer"
+                              >
+                                <img
+                                  src={image.image}
+                                  alt={image.title}
+                                  loading="lazy"
+                                  style={{
+                                    width: "100%",
+                                    height: "155px",
+                                    objectFit: "contain",
+                                    background: "#f8fafc"
+                                  }}
+                                />
+                              </a>
+
+                              <div style={{ padding: "9px", fontSize: "12px" }}>
+                                <strong>{image.title}</strong>
+
+                                {image.artist && (
+                                  <p style={{ margin: "5px 0", color: "#64748b" }}>
+                                    Creator: {image.artist}
+                                  </p>
+                                )}
+
+                                <p style={{ margin: "5px 0", color: "#64748b" }}>
+                                  License: {image.license || "Check source page"}
+                                </p>
+
+                                <a
+                                  href={image.source}
+                                  target="_blank"
+                                  rel="noreferrer"
+                                  style={{
+                                    color: "#2563eb",
+                                    textDecoration: "none"
+                                  }}
+                                >
+                                  View source <ExternalLink size={12} style={{ verticalAlign: "middle" }} />
+                                </a>
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+                  </>
                 ) : (
                   <div style={{ whiteSpace: "pre-wrap" }}>
                     {message.text}
