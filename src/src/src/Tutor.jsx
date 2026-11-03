@@ -135,21 +135,20 @@ export default function Tutor({ onBack }) {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
 
-  const bottomRef = useRef(null);
-
-  useEffect(() => {
-    const timer = setTimeout(() => {
-      bottomRef.current?.scrollIntoView({
-        behavior: "smooth",
-        block: "end"
-      });
-    }, 150);
-
-    return () => clearTimeout(timer);
-  }, [messages, loading]);
+  const questionStartRef = useRef(null);
+  const answerEndRef = useRef(null);
 
   const API_URL =
     "https://medmind-ai.mohamedradey2hh0.workers.dev/";
+
+  function scrollToElement(ref) {
+    setTimeout(() => {
+      ref.current?.scrollIntoView({
+        behavior: "smooth",
+        block: "start"
+      });
+    }, 150);
+  }
 
   async function askAI(e) {
     e.preventDefault();
@@ -171,6 +170,9 @@ export default function Tutor({ onBack }) {
     setQuestion("");
     setLoading(true);
     setError("");
+
+    // Scroll to the beginning of the new question
+    scrollToElement(questionStartRef);
 
     try {
       const response = await fetch(API_URL, {
@@ -195,6 +197,14 @@ export default function Tutor({ onBack }) {
         ...prev,
         { role: "assistant", text: data.answer }
       ]);
+
+      // Scroll to the end of the completed answer
+      setTimeout(() => {
+        answerEndRef.current?.scrollIntoView({
+          behavior: "smooth",
+          block: "end"
+        });
+      }, 200);
 
     } catch (err) {
       setError(
@@ -336,7 +346,6 @@ export default function Tutor({ onBack }) {
             </div>
           </div>
 
-          {/* Conversation: page-level scrolling */}
           <div
             style={{
               marginTop: "25px",
@@ -359,44 +368,56 @@ export default function Tutor({ onBack }) {
               </div>
             )}
 
-            {messages.map((message, index) => (
-              <div
-                key={index}
-                style={{
-                  alignSelf:
-                    message.role === "user"
-                      ? "flex-end"
-                      : "stretch",
-                  background:
-                    message.role === "user"
-                      ? "#2563eb"
-                      : "#f8fafc",
-                  color:
-                    message.role === "user"
-                      ? "white"
-                      : "#1e293b",
-                  padding: "14px 17px",
-                  borderRadius: "14px",
-                  maxWidth:
-                    message.role === "user" ? "90%" : "100%",
-                  border:
-                    message.role === "assistant"
-                      ? "1px solid #e2e8f0"
-                      : "none",
-                  lineHeight: 1.7,
-                  overflowWrap: "anywhere",
-                  fontFamily: "Cairo, sans-serif"
-                }}
-              >
-                {message.role === "assistant" ? (
-                  <FormattedAnswer text={message.text} />
-                ) : (
-                  <div style={{ whiteSpace: "pre-wrap" }}>
-                    {message.text}
+            {messages.map((message, index) => {
+              const isLatestUserQuestion =
+                message.role === "user" &&
+                index === messages.length - 1 -
+                  (loading ? 0 : 1);
+
+              return (
+                <React.Fragment key={index}>
+                  {message.role === "user" && isLatestUserQuestion && (
+                    <div ref={questionStartRef} />
+                  )}
+
+                  <div
+                    style={{
+                      alignSelf:
+                        message.role === "user"
+                          ? "flex-end"
+                          : "stretch",
+                      background:
+                        message.role === "user"
+                          ? "#2563eb"
+                          : "#f8fafc",
+                      color:
+                        message.role === "user"
+                          ? "white"
+                          : "#1e293b",
+                      padding: "14px 17px",
+                      borderRadius: "14px",
+                      maxWidth:
+                        message.role === "user" ? "90%" : "100%",
+                      border:
+                        message.role === "assistant"
+                          ? "1px solid #e2e8f0"
+                          : "none",
+                      lineHeight: 1.7,
+                      overflowWrap: "anywhere",
+                      fontFamily: "Cairo, sans-serif"
+                    }}
+                  >
+                    {message.role === "assistant" ? (
+                      <FormattedAnswer text={message.text} />
+                    ) : (
+                      <div style={{ whiteSpace: "pre-wrap" }}>
+                        {message.text}
+                      </div>
+                    )}
                   </div>
-                )}
-              </div>
-            ))}
+                </React.Fragment>
+              );
+            })}
 
             {loading && (
               <div
@@ -413,7 +434,7 @@ export default function Tutor({ onBack }) {
               </div>
             )}
 
-            <div ref={bottomRef} />
+            <div ref={answerEndRef} />
           </div>
 
           {error && (
