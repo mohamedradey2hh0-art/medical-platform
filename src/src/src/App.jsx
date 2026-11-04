@@ -26,6 +26,13 @@ import {
   AlertTriangle,
   Microscope,
   ClipboardCheck,
+  Lightbulb,
+  BookMarked,
+  GraduationCap as GraduationCapIcon,
+  Target,
+  ChevronDown,
+  ChevronUp,
+  Info,
 } from "lucide-react";
 
 import Tutor from "./Tutor.jsx";
@@ -84,127 +91,160 @@ const tools = [
 
 const THEME_KEY = "medmind-theme";
 
-
-// ==========================================
-// SPECIALTIES AND CASES
-// ==========================================
-
 const specialties = [
   {
     name: "Internal Medicine",
     ar: "الباطنة",
     icon: HeartPulse,
     color: "#0D9488",
-    cases: [
-      {
-        id: "internal_chest_pain",
-        title: "Chest Pain",
-        ar: "ألم الصدر",
-      },
-    ],
+    caseId: "internal_chest_pain",
+    caseTitle: "Chest Pain",
   },
   {
     name: "Pediatrics",
     ar: "الأطفال",
     icon: UserRound,
     color: "#2563EB",
-    cases: [
-      {
-        id: "pediatrics_fever",
-        title: "Pediatric Fever",
-        ar: "ارتفاع الحرارة عند الأطفال",
-      },
-    ],
+    caseId: "pediatrics_fever",
+    caseTitle: "Pediatric Fever",
   },
   {
     name: "Surgery",
     ar: "الجراحة",
     icon: Activity,
     color: "#D97706",
-    cases: [
-      {
-        id: "surgery_abdominal_pain",
-        title: "Acute Abdominal Pain",
-        ar: "ألم البطن الحاد",
-      },
-    ],
+    caseId: "surgery_abdominal_pain",
+    caseTitle: "Acute Abdominal Pain",
   },
   {
     name: "Cardiology",
     ar: "القلب",
     icon: HeartPulse,
     color: "#E11D48",
-    cases: [
-      {
-        id: "cardiology_palpitations",
-        title: "Palpitations",
-        ar: "خفقان القلب",
-      },
-    ],
+    caseId: "cardiology_palpitations",
+    caseTitle: "Palpitations",
   },
   {
     name: "Neurology",
     ar: "المخ والأعصاب",
     icon: Brain,
     color: "#7C3AED",
-    cases: [
-      {
-        id: "neurology_headache",
-        title: "Headache",
-        ar: "الصداع",
-      },
-    ],
+    caseId: "neurology_headache",
+    caseTitle: "Headache",
   },
   {
     name: "Emergency",
     ar: "الطوارئ",
     icon: Activity,
     color: "#EA580C",
-    cases: [
-      {
-        id: "emergency_trauma",
-        title: "Emergency Assessment",
-        ar: "إصابات الطوارئ",
-      },
-    ],
-  },
-  {
-    name: "Obstetrics & Gynecology",
-    ar: "النساء والتوليد",
-    icon: HeartPulse,
-    color: "#DB2777",
-    cases: [
-      {
-        id: "obgyn_ectopic_pregnancy",
-        title: "Ectopic Pregnancy",
-        ar: "الحمل خارج الرحم",
-      },
-      {
-        id: "obgyn_preeclampsia",
-        title: "Preeclampsia",
-        ar: "تسمم الحمل",
-      },
-    ],
-  },
-  {
-    name: "Urology",
-    ar: "المسالك البولية",
-    icon: Activity,
-    color: "#0284C7",
-    cases: [
-      {
-        id: "urology_renal_colic",
-        title: "Renal Colic",
-        ar: "المغص الكلوي",
-      },
-      {
-        id: "urology_acute_retention",
-        title: "Acute Urinary Retention",
-        ar: "احتباس البول الحاد",
-      },
-    ],
+    caseId: "emergency_trauma",
+    caseTitle: "Emergency Assessment",
   },
 ];
+
+
+// ==========================================
+// READY-MADE CASE DATA
+// ==========================================
+
+const chestPainCase = {
+  title: "Chest Pain in a 58-year-old Male",
+  specialty: "Internal Medicine",
+  caseNumber: "Case 001",
+
+  description:
+    "A 58-year-old male presents to the emergency department with severe central chest pain for 2 hours. The pain is described as pressure-like and radiates to his left arm. He has a history of hypertension and diabetes mellitus.",
+
+  vitals: [
+    ["BP", "150/90 mmHg"],
+    ["HR", "105 bpm"],
+    ["RR", "22/min"],
+    ["SpO₂", "95%"],
+  ],
+
+  question: "What is the most likely diagnosis?",
+
+  options: [
+    {
+      id: "A",
+      text: "Acute myocardial infarction",
+      correct: true,
+      explanation:
+        "ده الاختيار الصحيح. ألم ضاغط في منتصف الصدر، ممتد للذراع الشمال، مع وجود عوامل خطورة للقلب مثل السكر والضغط. الصورة دي تخلينا نشك بقوة في Acute Coronary Syndrome، ومن الاحتمالات المهمة Acute Myocardial Infarction.",
+    },
+    {
+      id: "B",
+      text: "Gastroesophageal reflux disease",
+      correct: false,
+      explanation:
+        "ارتجاع المريء غالبًا يسبب Heartburn أو حرقان خلف عظمة القص، وقد يزيد بعد الأكل أو عند الاستلقاء. لكنه لا يفسر بنفس القوة الألم الضاغط الشديد الممتد للذراع الشمال مع عوامل الخطورة القلبية. ومع ذلك، لا يمكن استبعاد مشكلة القلب لمجرد وجود أعراض تشبه الحموضة.",
+    },
+    {
+      id: "C",
+      text: "Musculoskeletal chest pain",
+      correct: false,
+      explanation:
+        "ألم العضلات أو جدار الصدر غالبًا يزيد مع الحركة أو الضغط على مكان الألم، وقد يكون موضعيًا. الحالة هنا تصف ألمًا ضاغطًا مركزيًا ممتدًا للذراع، وده يجعل السبب القلبي أخطر وأكثر احتمالًا.",
+    },
+    {
+      id: "D",
+      text: "Pneumonia",
+      correct: false,
+      explanation:
+        "الالتهاب الرئوي غالبًا يصاحبه Fever وCough وSputum وقد يحدث Pleuritic chest pain، أي ألم يزيد مع التنفس العميق أو الكحة. المعطيات الحالية لا تذكر أعراضًا تنفسية أو حمى تدعم هذا التشخيص.",
+    },
+  ],
+};
+
+
+// ==========================================
+// REUSABLE UI COMPONENTS
+// ==========================================
+
+function SectionTitle({ icon: Icon, title, subtitle, color = "#0D9488" }) {
+  return (
+    <div style={{
+      display: "flex",
+      alignItems: "flex-start",
+      gap: 10,
+      marginBottom: 14,
+    }}>
+      <div style={{
+        width: 38,
+        height: 38,
+        borderRadius: 11,
+        background: `${color}18`,
+        color,
+        display: "grid",
+        placeItems: "center",
+        flexShrink: 0,
+      }}>
+        <Icon size={20} />
+      </div>
+
+      <div>
+        <h3 style={{
+          margin: 0,
+          fontSize: 16,
+          fontWeight: 900,
+        }}>
+          {title}
+        </h3>
+
+        {subtitle && (
+          <p style={{
+            margin: "5px 0 0",
+            color: "var(--muted, #64748b)",
+            fontSize: 12,
+            lineHeight: 1.7,
+          }}>
+            {subtitle}
+          </p>
+        )}
+      </div>
+    </div>
+  );
+}
 
 
 // ==========================================
@@ -218,12 +258,9 @@ function ClinicalCases({ darkMode, onBack }) {
     "Internal Medicine"
   );
 
-  const [selectedCaseId, setSelectedCaseId] = useState(
-    "internal_chest_pain"
-  );
-
   const [answer, setAnswer] = useState("");
   const [showResult, setShowResult] = useState(false);
+  const [showExplanation, setShowExplanation] = useState(false);
 
   const [question, setQuestion] = useState("");
   const [messages, setMessages] = useState([]);
@@ -252,24 +289,9 @@ function ClinicalCases({ darkMode, onBack }) {
     specialties.find(s => s.name === specialty) ||
     specialties[0];
 
-  const selectedCase =
-    selectedSpecialty.cases.find(
-      c => c.id === selectedCaseId
-    ) || selectedSpecialty.cases[0];
-
-  function chooseSpecialty(s) {
-    setSpecialty(s.name);
-    setSelectedCaseId(s.cases[0].id);
-  }
-
-  const caseOptions = [
-    "Acute myocardial infarction",
-    "Gastroesophageal reflux disease",
-    "Musculoskeletal chest pain",
-    "Pneumonia",
-  ];
-
-  const correctAnswer = "Acute myocardial infarction";
+  const correctAnswer = chestPainCase.options.find(
+    option => option.correct
+  ).text;
 
   const pageStyle = {
     minHeight: "100vh",
@@ -312,7 +334,14 @@ function ClinicalCases({ darkMode, onBack }) {
     fontWeight: 800,
   };
 
-  // Scroll to latest chat message.
+  const panelStyle = {
+    background: dark ? "#101c2b" : "#f8fafc",
+    border: `1px solid ${colors.border}`,
+    borderRadius: 13,
+    padding: 16,
+    marginTop: 14,
+  };
+
   useEffect(() => {
     chatEndRef.current?.scrollIntoView({
       behavior: "smooth",
@@ -320,26 +349,11 @@ function ClinicalCases({ darkMode, onBack }) {
     });
   }, [messages, loading]);
 
-  // Stop reading when component unmounts.
   useEffect(() => {
     return () => {
       abortRef.current?.abort();
     };
   }, []);
-
-
-  // ========================================
-  // SPECIALTY SELECTION
-  // ========================================
-
-  function handleSpecialtyChange(s) {
-    chooseSpecialty(s);
-
-    // Clear previous session when specialty changes.
-    setMessages([]);
-    setQuestion("");
-    setError("");
-  }
 
 
   // ========================================
@@ -349,6 +363,7 @@ function ClinicalCases({ darkMode, onBack }) {
   const resetCase = () => {
     setAnswer("");
     setShowResult(false);
+    setShowExplanation(false);
   };
 
 
@@ -356,10 +371,7 @@ function ClinicalCases({ darkMode, onBack }) {
   // STREAMING AI PATIENT CHAT
   // ========================================
 
-  async function sendToPatient(
-    message,
-    isStarting = false
-  ) {
+  async function sendToPatient(message, isStarting = false) {
     if (loading) return;
 
     const currentQuestion = message.trim();
@@ -367,9 +379,7 @@ function ClinicalCases({ darkMode, onBack }) {
     if (!currentQuestion) return;
 
     const history = messages.map(m => ({
-      role: m.from === "doctor"
-        ? "user"
-        : "assistant",
+      role: m.from === "doctor" ? "user" : "assistant",
       text: m.text,
     }));
 
@@ -416,7 +426,7 @@ function ClinicalCases({ darkMode, onBack }) {
         body: JSON.stringify({
           mode: "clinical_patient",
           specialty: selectedSpecialty.name,
-          caseId: selectedCase.id,
+          caseId: selectedSpecialty.caseId,
           question: currentQuestion,
           history,
         }),
@@ -524,9 +534,7 @@ function ClinicalCases({ darkMode, onBack }) {
       }
 
       if (!finished) {
-        throw new Error(
-          "الرد وصل بشكل غير مكتمل. أعد المحاولة."
-        );
+        throw new Error("الرد وصل بشكل غير مكتمل. أعد المحاولة.");
       }
 
     } catch (err) {
@@ -607,6 +615,392 @@ function ClinicalCases({ darkMode, onBack }) {
   }
 
 
+  // ========================================
+  // READY CASE EXPLANATION
+  // ========================================
+
+  const reasoningSteps = [
+    {
+      title: "مكان الألم",
+      english: "Central chest pain",
+      explanation:
+        "الألم موجود في منتصف الصدر. المكان ده مهم لأن القلب موجود داخل التجويف الصدري، وألم نقص التروية القلبية غالبًا يُوصف كألم أو ضغط خلف عظمة القص.",
+    },
+    {
+      title: "طبيعة الألم",
+      english: "Pressure-like pain",
+      explanation:
+        "المريض وصف الألم بأنه ضاغط، مش مجرد وخز بسيط. الألم الضاغط أو العاصر من الأوصاف الكلاسيكية التي ترفع الشك في نقص وصول الدم لعضلة القلب.",
+    },
+    {
+      title: "امتداد الألم",
+      english: "Radiation to left arm",
+      explanation:
+        "الألم ممتد للذراع الشمال. ده نمط معروف في ألم القلب؛ لأن الإشارات العصبية القادمة من القلب قد يشعر بها المريض في الصدر والكتف أو الذراع.",
+    },
+    {
+      title: "عوامل الخطورة",
+      english: "Diabetes & Hypertension",
+      explanation:
+        "السكر والضغط من أهم عوامل الخطورة لأمراض الشرايين التاجية. مع الوقت قد يسببان تلفًا في الأوعية الدموية ويساعدان على تكوّن Atherosclerosis، أي تصلب الشرايين.",
+    },
+    {
+      title: "سرعة القلب",
+      english: "Tachycardia",
+      explanation:
+        "معدل ضربات القلب 105 في الدقيقة، وده أعلى من الطبيعي للبالغ في الراحة. قد يكون استجابة للألم أو التوتر أو مشكلة قلبية، لكنه وحده لا يحدد التشخيص.",
+    },
+  ];
+
+  const renderReadyExplanation = () => (
+    <div style={{
+      marginTop: 20,
+      display: "grid",
+      gap: 14,
+    }}>
+
+      <div style={{
+        ...panelStyle,
+        borderRight: "4px solid #0D9488",
+      }}>
+        <SectionTitle
+          icon={Lightbulb}
+          title="أولًا: افهم الحالة ببساطة"
+          subtitle="خلينا نترجم القصة الطبية ونفهم معناها."
+        />
+
+        <p style={{
+          lineHeight: 2.1,
+          fontSize: 14,
+          margin: 0,
+        }}>
+          عندنا راجل عمره 58 سنة راح الطوارئ بسبب ألم شديد في منتصف
+          الصدر مستمر من ساعتين. الألم شبه الضغط أو العصر، وبيمتد
+          للذراع الشمال. عنده تاريخ مرضي من ارتفاع ضغط الدم ومرض
+          السكري.
+        </p>
+
+        <p style={{
+          lineHeight: 2,
+          fontSize: 14,
+          margin: "10px 0 0",
+        }}>
+          ببساطة: دي مش شكوى عادية نتعامل معاها على إنها حموضة أو
+          شد عضلي قبل ما نستبعد السبب القلبي. لازم نفكر أولًا في
+          مشكلة حادة في شرايين القلب؛ لأنها الأخطر والأكثر توافقًا
+          مع وصف الألم.
+        </p>
+      </div>
+
+
+      <div style={panelStyle}>
+        <SectionTitle
+          icon={BookOpen}
+          title="ثانيًا: ترجمة المصطلحات الطبية"
+          subtitle="افهم الكلمات اللي بتتكرر في الـ Clinical Cases."
+          color="#2563EB"
+        />
+
+        <div style={{
+          display: "grid",
+          gap: 9,
+        }}>
+          {[
+            ["Presents to the emergency department", "حضر إلى قسم الطوارئ."],
+            ["Severe", "شديد."],
+            ["Central chest pain", "ألم في منتصف الصدر."],
+            ["Pressure-like", "يشبه الضغط أو العصر."],
+            ["Radiates to left arm", "يمتد إلى الذراع الأيسر."],
+            ["Hypertension", "ارتفاع ضغط الدم."],
+            ["Diabetes mellitus", "مرض السكري."],
+            ["Vital signs", "العلامات الحيوية."],
+            ["Myocardial infarction", "احتشاء عضلة القلب / جلطة القلب."],
+            ["Acute coronary syndrome", "متلازمة الشريان التاجي الحادة."],
+          ].map(([english, arabic]) => (
+            <div
+              key={english}
+              style={{
+                display: "flex",
+                justifyContent: "space-between",
+                alignItems: "center",
+                flexWrap: "wrap",
+                gap: 8,
+                padding: "10px 12px",
+                borderRadius: 9,
+                background: colors.card,
+                border: `1px solid ${colors.border}`,
+              }}
+            >
+              <strong
+                dir="ltr"
+                style={{
+                  fontSize: 12,
+                  color: "#0D9488",
+                  textAlign: "left",
+                }}
+              >
+                {english}
+              </strong>
+
+              <span style={{
+                fontSize: 13,
+                color: colors.text,
+              }}>
+                {arabic}
+              </span>
+            </div>
+          ))}
+        </div>
+      </div>
+
+
+      <div style={panelStyle}>
+        <SectionTitle
+          icon={Brain}
+          title="ثالثًا: اربط المعلومات ببعضها"
+          subtitle="دي أهم خطوة في التفكير الإكلينيكي."
+          color="#7C3AED"
+        />
+
+        <div style={{
+          display: "grid",
+          gap: 11,
+        }}>
+          {reasoningSteps.map((step, index) => (
+            <div
+              key={step.title}
+              style={{
+                display: "flex",
+                gap: 11,
+                alignItems: "flex-start",
+                padding: 12,
+                background: colors.card,
+                border: `1px solid ${colors.border}`,
+                borderRadius: 11,
+              }}
+            >
+              <div style={{
+                width: 29,
+                height: 29,
+                borderRadius: 9,
+                background: "#7C3AED18",
+                color: "#A78BFA",
+                display: "grid",
+                placeItems: "center",
+                flexShrink: 0,
+                fontWeight: 900,
+                fontSize: 13,
+              }}>
+                {index + 1}
+              </div>
+
+              <div>
+                <strong style={{
+                  display: "block",
+                  fontSize: 14,
+                }}>
+                  {step.title}
+                </strong>
+
+                <span
+                  dir="ltr"
+                  style={{
+                    display: "block",
+                    color: "#0D9488",
+                    fontSize: 11,
+                    marginTop: 3,
+                    textAlign: "right",
+                  }}
+                >
+                  {step.english}
+                </span>
+
+                <p style={{
+                  color: colors.muted,
+                  fontSize: 13,
+                  lineHeight: 1.9,
+                  margin: "7px 0 0",
+                }}>
+                  {step.explanation}
+                </p>
+              </div>
+            </div>
+          ))}
+        </div>
+
+        <div style={{
+          marginTop: 14,
+          padding: 14,
+          borderRadius: 10,
+          background: dark ? "#123b3b" : "#e0f2f1",
+          lineHeight: 2,
+        }}>
+          <strong style={{ color: "#0D9488" }}>
+            الخلاصة من ربط المعلومات:
+          </strong>
+
+          <p style={{
+            margin: "5px 0 0",
+            fontSize: 13,
+          }}>
+            رجل كبير نسبيًا + ألم صدري ضاغط + امتداد للذراع الشمال
+            + سكر وضغط = اشتباه قوي في Acute Coronary Syndrome.
+            لازم نستبعد الجلطة القلبية بشكل عاجل.
+          </p>
+        </div>
+      </div>
+
+
+      <div style={panelStyle}>
+        <SectionTitle
+          icon={Target}
+          title="رابعًا: ما التشخيص الذي نفكر فيه؟"
+          subtitle="Clinical reasoning and differential diagnosis."
+          color="#D97706"
+        />
+
+        <div style={{
+          background: dark ? "#123b3b" : "#ecfdf5",
+          padding: 15,
+          borderRadius: 11,
+          border: "1px solid #0D948855",
+        }}>
+          <strong style={{
+            color: "#0D9488",
+            fontSize: 15,
+          }}>
+            Acute Coronary Syndrome (ACS)
+          </strong>
+
+          <p style={{
+            fontSize: 13,
+            lineHeight: 2,
+            margin: "8px 0 0",
+          }}>
+            هو المصطلح الذي يشمل الحالات الناتجة عن نقص حاد في تدفق
+            الدم إلى عضلة القلب. ومن ضمنها Unstable Angina و
+            Myocardial Infarction.
+          </p>
+
+          <p style={{
+            fontSize: 13,
+            lineHeight: 2,
+            margin: "7px 0 0",
+          }}>
+            السؤال يطلب الاختيار الأكثر احتمالًا من الاختيارات
+            الموجودة، وهو Acute Myocardial Infarction. لكن لا يمكن
+            تأكيد حدوث جلطة من وصف الألم وحده؛ نحتاج ECG وCardiac
+            Troponin مع التقييم الإكلينيكي.
+          </p>
+        </div>
+      </div>
+
+
+      <div style={panelStyle}>
+        <SectionTitle
+          icon={Microscope}
+          title="خامسًا: الفحوصات المهمة"
+          subtitle="إيه اللي نطلبه وليه؟"
+          color="#2563EB"
+        />
+
+        {[
+          {
+            name: "12-lead ECG",
+            why: "نبحث عن تغيرات كهربائية تشير إلى نقص التروية أو احتشاء عضلة القلب، مثل ST elevation أو ST depression أو T-wave inversion.",
+            priority: "يُجرى بشكل عاجل",
+          },
+          {
+            name: "Cardiac Troponin",
+            why: "مؤشر على إصابة عضلة القلب. قد نحتاج قياسات متكررة حسب توقيت بداية الأعراض والبروتوكول المتبع.",
+            priority: "قياسات متسلسلة عند الحاجة",
+          },
+          {
+            name: "Continuous Cardiac Monitoring",
+            why: "لمراقبة ضربات القلب واكتشاف اضطرابات النظم التي قد تحدث مع الحالات القلبية الحادة.",
+            priority: "مراقبة مستمرة",
+          },
+        ].map(item => (
+          <div
+            key={item.name}
+            style={{
+              padding: 12,
+              borderBottom: `1px solid ${colors.border}`,
+            }}
+          >
+            <div style={{
+              display: "flex",
+              justifyContent: "space-between",
+              flexWrap: "wrap",
+              gap: 7,
+            }}>
+              <strong
+                dir="ltr"
+                style={{
+                  color: "#0D9488",
+                  fontSize: 13,
+                }}
+              >
+                {item.name}
+              </strong>
+
+              <span style={{
+                color: colors.muted,
+                fontSize: 11,
+              }}>
+                {item.priority}
+              </span>
+            </div>
+
+            <p style={{
+              fontSize: 13,
+              lineHeight: 1.9,
+              color: colors.muted,
+              margin: "7px 0 0",
+            }}>
+              {item.why}
+            </p>
+          </div>
+        ))}
+      </div>
+
+
+      <div style={{
+        ...panelStyle,
+        borderRight: "4px solid #D97706",
+      }}>
+        <SectionTitle
+          icon={BookMarked}
+          title="سادسًا: Exam Pearl"
+          subtitle="معلومة مهمة تثبت في ذهنك."
+          color="#D97706"
+        />
+
+        <p style={{
+          fontSize: 14,
+          lineHeight: 2,
+          margin: 0,
+        }}>
+          أي مريض عنده ألم صدري جديد وشديد، خصوصًا لو الألم ضاغط
+          أو ممتد للذراع أو الفك، لازم نضع Acute Coronary Syndrome
+          ضمن الاحتمالات الخطيرة ونبدأ التقييم العاجل.
+        </p>
+
+        <p style={{
+          fontSize: 13,
+          color: colors.muted,
+          lineHeight: 1.9,
+          margin: "8px 0 0",
+        }}>
+          لا تعتمد على الأعراض وحدها لتأكيد أو نفي الجلطة، ولا تؤخر
+          ECG والتقييم الإسعافي في حالة الاشتباه.
+        </p>
+      </div>
+
+    </div>
+  );
+
+
   return (
     <div style={pageStyle} dir="rtl">
       <div style={{ maxWidth: 950, margin: "auto" }}>
@@ -639,15 +1033,13 @@ function ClinicalCases({ darkMode, onBack }) {
 
         {/* PAGE HEADER */}
 
-        <div
-          style={{
-            ...cardStyle,
-            background: "linear-gradient(120deg,#087e78,#075b63)",
-            color: "white",
-            marginBottom: 25,
-            padding: 28,
-          }}
-        >
+        <div style={{
+          ...cardStyle,
+          background: "linear-gradient(120deg,#087e78,#075b63)",
+          color: "white",
+          marginBottom: 25,
+          padding: 28,
+        }}>
           <div style={{
             display: "flex",
             alignItems: "center",
@@ -736,7 +1128,8 @@ function ClinicalCases({ darkMode, onBack }) {
                   lineHeight: 1.9,
                   fontSize: 13,
                 }}>
-                  حالات سريرية جاهزة بأسئلة واختيارات وتفسير للإجابات.
+                  حالات سريرية جاهزة مع شرح عربي مبسط، وربط العلامات
+                  والأعراض، وتحليل الاختيارات والإجابة.
                 </p>
 
                 <div style={{
@@ -828,7 +1221,7 @@ function ClinicalCases({ darkMode, onBack }) {
                 return (
                   <button
                     key={s.name}
-                    onClick={() => handleSpecialtyChange(s)}
+                    onClick={() => setSpecialty(s.name)}
                     style={{
                       ...buttonStyle,
                       borderColor:
@@ -837,9 +1230,7 @@ function ClinicalCases({ darkMode, onBack }) {
                           : colors.border,
                       background:
                         specialty === s.name
-                          ? dark
-                            ? "#203344"
-                            : "#f0fdfa"
+                          ? dark ? "#203344" : "#f0fdfa"
                           : colors.card,
                     }}
                   >
@@ -897,8 +1288,6 @@ function ClinicalCases({ darkMode, onBack }) {
               </div>
             </div>
 
-            {/* SPECIALTIES GRID */}
-
             <div style={{
               display: "grid",
               gridTemplateColumns: "repeat(auto-fit,minmax(140px,1fr))",
@@ -910,7 +1299,7 @@ function ClinicalCases({ darkMode, onBack }) {
                 return (
                   <button
                     key={s.name}
-                    onClick={() => handleSpecialtyChange(s)}
+                    onClick={() => setSpecialty(s.name)}
                     style={{
                       ...buttonStyle,
                       borderColor:
@@ -919,9 +1308,7 @@ function ClinicalCases({ darkMode, onBack }) {
                           : colors.border,
                       background:
                         specialty === s.name
-                          ? dark
-                            ? "#203344"
-                            : "#f0fdfa"
+                          ? dark ? "#203344" : "#f0fdfa"
                           : colors.card,
                     }}
                   >
@@ -945,68 +1332,6 @@ function ClinicalCases({ darkMode, onBack }) {
               })}
             </div>
 
-
-            {/* CASE SELECTION */}
-
-            <h3 style={{
-              fontSize: 16,
-              marginTop: 25,
-              marginBottom: 12,
-            }}>
-              اختر الحالة السريرية
-            </h3>
-
-            <div style={{
-              display: "grid",
-              gridTemplateColumns: "repeat(auto-fit,minmax(200px,1fr))",
-              gap: 10,
-            }}>
-              {selectedSpecialty.cases.map(c => (
-                <button
-                  key={c.id}
-                  onClick={() => setSelectedCaseId(c.id)}
-                  style={{
-                    ...buttonStyle,
-                    borderColor:
-                      selectedCaseId === c.id
-                        ? selectedSpecialty.color
-                        : colors.border,
-                    background:
-                      selectedCaseId === c.id
-                        ? dark
-                          ? "#203344"
-                          : "#f0fdfa"
-                        : colors.card,
-                  }}
-                >
-                  <div style={{
-                    fontWeight: 800,
-                    marginBottom: 5,
-                  }}>
-                    {c.ar}
-                  </div>
-
-                  <div style={{
-                    color: colors.muted,
-                    fontSize: 12,
-                  }}>
-                    {c.title}
-                  </div>
-
-                  {selectedCaseId === c.id && (
-                    <CheckCircle2
-                      size={18}
-                      color={selectedSpecialty.color}
-                      style={{ marginTop: 8 }}
-                    />
-                  )}
-                </button>
-              ))}
-            </div>
-
-
-            {/* SELECTED CASE INFORMATION */}
-
             <div style={{
               marginTop: 22,
               padding: 15,
@@ -1028,15 +1353,7 @@ function ClinicalCases({ darkMode, onBack }) {
                   color: colors.muted,
                   marginTop: 4,
                 }}>
-                  Selected case: {selectedCase.title}
-                </p>
-
-                <p style={{
-                  fontSize: 12,
-                  color: colors.muted,
-                  marginTop: 3,
-                }}>
-                  {selectedCase.ar}
+                  First case: {selectedSpecialty.caseTitle}
                 </p>
               </div>
             </div>
@@ -1087,7 +1404,7 @@ function ClinicalCases({ darkMode, onBack }) {
                 fontWeight: 800,
                 fontSize: 13,
               }}>
-                Internal Medicine · Case 001
+                {chestPainCase.specialty} · {chestPainCase.caseNumber}
               </span>
 
               <span style={{
@@ -1106,7 +1423,7 @@ function ClinicalCases({ darkMode, onBack }) {
               fontSize: 22,
               margin: "18px 0 12px",
             }}>
-              Chest Pain in a 58-year-old Male
+              {chestPainCase.title}
             </h2>
 
             <div style={{
@@ -1116,160 +1433,427 @@ function ClinicalCases({ darkMode, onBack }) {
               lineHeight: 2,
               fontSize: 14,
             }}>
-              A 58-year-old male presents to the emergency department with
-              severe central chest pain for 2 hours. The pain is described as
-              pressure-like and radiates to his left arm. He has a history of
-              hypertension and diabetes mellitus.
-
-              <br />
-
-              <strong>Vital signs:</strong>
-
-              <br />
-
-              BP: 150/90 mmHg · HR: 105 bpm · RR: 22/min · SpO₂: 95%
-            </div>
-
-            <h3 style={{
-              margin: "22px 0 12px",
-              fontSize: 17,
-            }}>
-              What is the most likely diagnosis?
-            </h3>
-
-            <div style={{
-              display: "grid",
-              gap: 10,
-            }}>
-              {caseOptions.map((option, i) => (
-                <button
-                  key={option}
-                  onClick={() => {
-                    if (!showResult) setAnswer(option);
-                  }}
-                  style={{
-                    ...buttonStyle,
-                    borderColor:
-                      answer === option
-                        ? "#0D9488"
-                        : colors.border,
-                    background:
-                      answer === option
-                        ? dark
-                          ? "#123b3b"
-                          : "#f0fdfa"
-                        : colors.card,
-                    fontWeight:
-                      answer === option
-                        ? 800
-                        : 500,
-                  }}
-                >
-                  <span style={{
-                    marginLeft: 10,
-                    color: colors.muted,
-                  }}>
-                    {String.fromCharCode(65 + i)}.
-                  </span>
-
-                  {option}
-
-                  {showResult && option === correctAnswer && (
-                    <CheckCircle2
-                      color="#16A34A"
-                      size={18}
-                      style={{ float: "left" }}
-                    />
-                  )}
-                </button>
-              ))}
-            </div>
-
-            {!showResult ? (
-              <button
-                disabled={!answer}
-                onClick={() => setShowResult(true)}
-                style={{
-                  ...primaryButton,
-                  marginTop: 20,
-                  opacity: answer ? 1 : 0.5,
-                }}
-              >
-                Check Answer
-              </button>
-            ) : (
-              <div style={{
-                marginTop: 22,
-                padding: 18,
-                borderRadius: 12,
-                background:
-                  answer === correctAnswer
-                    ? dark
-                      ? "#123b2b"
-                      : "#ecfdf5"
-                    : dark
-                      ? "#3b2525"
-                      : "#fef2f2",
+              <div dir="ltr" style={{
+                textAlign: "left",
                 lineHeight: 2,
               }}>
-                <h3 style={{
-                  color:
-                    answer === correctAnswer
-                      ? "#16A34A"
-                      : "#EF4444",
-                  marginBottom: 8,
-                }}>
-                  {answer === correctAnswer
-                    ? "Correct Answer!"
-                    : "Not quite. Review the explanation."}
-                </h3>
+                {chestPainCase.description}
+              </div>
 
-                <strong>
-                  Diagnosis: Acute myocardial infarction (AMI)
-                </strong>
+              <div style={{
+                marginTop: 13,
+                fontWeight: 800,
+              }}>
+                Vital Signs:
+              </div>
 
-                <p style={{
-                  fontSize: 14,
-                  marginTop: 8,
-                }}>
-                  The central pressure-like chest pain radiating to the left
-                  arm, together with diabetes and hypertension, raises strong
-                  suspicion of acute coronary syndrome.
-                </p>
+              <div style={{
+                display: "grid",
+                gridTemplateColumns: "repeat(auto-fit,minmax(110px,1fr))",
+                gap: 8,
+                marginTop: 8,
+              }}>
+                {chestPainCase.vitals.map(([label, value]) => (
+                  <div
+                    key={label}
+                    style={{
+                      background: colors.card,
+                      border: `1px solid ${colors.border}`,
+                      padding: 10,
+                      borderRadius: 9,
+                    }}
+                  >
+                    <div style={{
+                      color: colors.muted,
+                      fontSize: 11,
+                    }}>
+                      {label}
+                    </div>
 
-                <strong>Important investigations:</strong>
+                    <strong
+                      dir="ltr"
+                      style={{
+                        display: "block",
+                        fontSize: 13,
+                        marginTop: 4,
+                        textAlign: "right",
+                      }}
+                    >
+                      {value}
+                    </strong>
+                  </div>
+                ))}
+              </div>
+            </div>
 
-                <ul style={{
-                  paddingRight: 22,
-                  fontSize: 14,
-                }}>
-                  <li>Immediate 12-lead ECG.</li>
-                  <li>Serial cardiac troponins.</li>
-                  <li>Continuous cardiac monitoring.</li>
-                </ul>
 
-                <strong>Clinical Pearl:</strong>
+            {/* UNDERSTAND CASE BUTTON */}
 
-                <p style={{ fontSize: 14 }}>
-                  Do not delay ECG and emergency assessment in suspected ACS.
-                  This is a training case, not a substitute for clinical protocols.
-                </p>
+            <button
+              onClick={() => setShowExplanation(value => !value)}
+              style={{
+                ...buttonStyle,
+                marginTop: 15,
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "space-between",
+                gap: 10,
+                borderColor: "#0D9488",
+                background: dark ? "#123b3b" : "#f0fdfa",
+              }}
+            >
+              <span style={{
+                display: "flex",
+                alignItems: "center",
+                gap: 9,
+                color: "#0D9488",
+                fontWeight: 900,
+              }}>
+                <Brain size={19} />
+                {showExplanation
+                  ? "إخفاء شرح الحالة"
+                  : "افهم الحالة واربط المعلومات قبل الحل"}
+              </span>
 
+              {showExplanation
+                ? <ChevronUp size={18} color="#0D9488" />
+                : <ChevronDown size={18} color="#0D9488" />
+              }
+            </button>
+
+
+            {showExplanation && renderReadyExplanation()}
+
+
+            {/* QUESTION */}
+
+            <div style={{
+              marginTop: 24,
+              paddingTop: 18,
+              borderTop: `1px solid ${colors.border}`,
+            }}>
+              <h3 style={{
+                margin: "0 0 12px",
+                fontSize: 17,
+              }}>
+                {chestPainCase.question}
+              </h3>
+
+              <p style={{
+                color: colors.muted,
+                fontSize: 12,
+                marginBottom: 14,
+                lineHeight: 1.8,
+              }}>
+                اختار الإجابة الأقرب للحالة، وبعدها هنراجع مع بعض
+                سبب صحة الإجابة وسبب خطأ باقي الاختيارات.
+              </p>
+
+              <div style={{
+                display: "grid",
+                gap: 10,
+              }}>
+                {chestPainCase.options.map(option => (
+                  <button
+                    key={option.id}
+                    onClick={() => {
+                      if (!showResult) setAnswer(option.text);
+                    }}
+                    style={{
+                      ...buttonStyle,
+                      display: "flex",
+                      alignItems: "center",
+                      gap: 10,
+                      borderColor:
+                        showResult && option.correct
+                          ? "#16A34A"
+                          : answer === option.text
+                            ? "#0D9488"
+                            : colors.border,
+                      background:
+                        showResult && option.correct
+                          ? dark ? "#123b2b" : "#ecfdf5"
+                          : answer === option.text
+                            ? dark ? "#123b3b" : "#f0fdfa"
+                            : colors.card,
+                      fontWeight:
+                        answer === option.text ? 800 : 500,
+                    }}
+                  >
+                    <span style={{
+                      width: 27,
+                      height: 27,
+                      borderRadius: 8,
+                      background: colors.soft,
+                      display: "grid",
+                      placeItems: "center",
+                      flexShrink: 0,
+                      fontSize: 12,
+                      fontWeight: 900,
+                    }}>
+                      {option.id}
+                    </span>
+
+                    <span style={{
+                      flex: 1,
+                    }}>
+                      {option.text}
+                    </span>
+
+                    {showResult && option.correct && (
+                      <CheckCircle2
+                        color="#16A34A"
+                        size={19}
+                      />
+                    )}
+
+                    {showResult &&
+                      !option.correct &&
+                      answer === option.text && (
+                        <X color="#EF4444" size={19} />
+                      )}
+                  </button>
+                ))}
+              </div>
+
+
+              {!showResult ? (
                 <button
-                  onClick={resetCase}
+                  disabled={!answer}
+                  onClick={() => setShowResult(true)}
                   style={{
                     ...primaryButton,
-                    marginTop: 15,
-                    display: "flex",
-                    alignItems: "center",
-                    gap: 7,
+                    marginTop: 20,
+                    opacity: answer ? 1 : 0.5,
+                    cursor: answer ? "pointer" : "not-allowed",
+                    width: "100%",
                   }}
                 >
-                  <RotateCcw size={16} />
-                  Try Again
+                  تحقق من إجابتي
                 </button>
-              </div>
-            )}
+              ) : (
+                <div style={{
+                  marginTop: 22,
+                }}>
+
+                  {/* RESULT SUMMARY */}
+
+                  <div style={{
+                    padding: 17,
+                    borderRadius: 12,
+                    background:
+                      answer === correctAnswer
+                        ? dark ? "#123b2b" : "#ecfdf5"
+                        : dark ? "#3b2525" : "#fef2f2",
+                    border: `1px solid ${
+                      answer === correctAnswer
+                        ? "#16A34A55"
+                        : "#EF444455"
+                    }`,
+                  }}>
+                    <div style={{
+                      display: "flex",
+                      alignItems: "center",
+                      gap: 9,
+                    }}>
+                      {answer === correctAnswer
+                        ? <CheckCircle2 color="#16A34A" size={23} />
+                        : <AlertTriangle color="#EF4444" size={23} />
+                      }
+
+                      <h3 style={{
+                        margin: 0,
+                        color:
+                          answer === correctAnswer
+                            ? "#16A34A"
+                            : "#EF4444",
+                        fontSize: 17,
+                      }}>
+                        {answer === correctAnswer
+                          ? "ممتاز! إجابتك صحيحة"
+                          : "إجابتك غير صحيحة، تعال نفهم السبب"}
+                      </h3>
+                    </div>
+
+                    <p style={{
+                      margin: "10px 0 0",
+                      fontSize: 13,
+                      lineHeight: 1.9,
+                    }}>
+                      الإجابة الصحيحة هي:
+                      {" "}
+                      <strong style={{ color: "#16A34A" }}>
+                        Acute Myocardial Infarction (AMI)
+                      </strong>
+                    </p>
+                  </div>
+
+
+                  {/* WHY EACH ANSWER */}
+
+                  <div style={{
+                    marginTop: 18,
+                  }}>
+                    <SectionTitle
+                      icon={Brain}
+                      title="ليه الإجابة دي صح أو غلط؟"
+                      subtitle="راجع منطق كل اختيار بدل ما تحفظ الإجابة فقط."
+                    />
+
+                    <div style={{
+                      display: "grid",
+                      gap: 11,
+                    }}>
+                      {chestPainCase.options.map(option => (
+                        <div
+                          key={option.id}
+                          style={{
+                            padding: 14,
+                            borderRadius: 11,
+                            border: `1px solid ${
+                              option.correct
+                                ? "#16A34A66"
+                                : colors.border
+                            }`,
+                            background: colors.soft,
+                          }}
+                        >
+                          <div style={{
+                            display: "flex",
+                            alignItems: "center",
+                            gap: 8,
+                            marginBottom: 8,
+                          }}>
+                            {option.correct
+                              ? <CheckCircle2 color="#16A34A" size={18} />
+                              : <X color={colors.muted} size={18} />
+                            }
+
+                            <strong style={{
+                              fontSize: 13,
+                              color: option.correct
+                                ? "#16A34A"
+                                : colors.text,
+                            }}>
+                              {option.id}. {option.text}
+                            </strong>
+
+                            {option.correct && (
+                              <span style={{
+                                marginRight: "auto",
+                                fontSize: 10,
+                                color: "#16A34A",
+                                fontWeight: 900,
+                              }}>
+                                CORRECT
+                              </span>
+                            )}
+                          </div>
+
+                          <p style={{
+                            fontSize: 13,
+                            lineHeight: 2,
+                            color: colors.muted,
+                            margin: 0,
+                          }}>
+                            {option.explanation}
+                          </p>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+
+
+                  {/* FINAL CLINICAL REASONING */}
+
+                  <div style={{
+                    ...panelStyle,
+                    borderRight: "4px solid #0D9488",
+                  }}>
+                    <SectionTitle
+                      icon={Target}
+                      title="Clinical Reasoning Summary"
+                      subtitle="الطريقة التي تفكر بها في الامتحان."
+                    />
+
+                    <p style={{
+                      fontSize: 13,
+                      lineHeight: 2.1,
+                      margin: 0,
+                    }}>
+                      عندك مريض عمره 58 سنة يعاني من ألم صدري شديد
+                      ضاغط وممتد للذراع الأيسر، ولديه Diabetes و
+                      Hypertension. هذه المعطيات ترفع الاشتباه في
+                      Acute Coronary Syndrome، ولذلك يكون Acute
+                      Myocardial Infarction هو الاختيار الأنسب من
+                      الاختيارات المتاحة.
+                    </p>
+                  </div>
+
+
+                  {/* NEXT STEPS */}
+
+                  <div style={{
+                    ...panelStyle,
+                  }}>
+                    <SectionTitle
+                      icon={ClipboardCheck}
+                      title="What should you do next?"
+                      subtitle="الخطوة التالية في التعامل مع الحالة."
+                      color="#2563EB"
+                    />
+
+                    <ol style={{
+                      paddingRight: 22,
+                      fontSize: 13,
+                      lineHeight: 2.2,
+                      margin: 0,
+                    }}>
+                      <li>Immediate clinical assessment and ABC approach.</li>
+                      <li>Obtain a 12-lead ECG urgently.</li>
+                      <li>Measure cardiac troponin and repeat when indicated.</li>
+                      <li>Arrange urgent emergency/cardiology management according to local ACS protocol.</li>
+                    </ol>
+                  </div>
+
+
+                  <button
+                    onClick={resetCase}
+                    style={{
+                      ...primaryButton,
+                      marginTop: 18,
+                      display: "flex",
+                      alignItems: "center",
+                      justifyContent: "center",
+                      gap: 8,
+                      width: "100%",
+                    }}
+                  >
+                    <RotateCcw size={17} />
+                    أعد حل الحالة
+                  </button>
+                </div>
+              )}
+            </div>
+
+
+            <div style={{
+              marginTop: 18,
+              padding: 12,
+              background: colors.soft,
+              borderRadius: 10,
+              color: colors.muted,
+              fontSize: 11,
+              lineHeight: 1.9,
+            }}>
+              <Info size={15} style={{
+                verticalAlign: "middle",
+                marginLeft: 5,
+              }} />
+              هذه حالة تعليمية. التشخيص النهائي يعتمد على التقييم
+              الإكلينيكي وECG ونتائج الفحوصات، ولا يُعتمد على وصف
+              الألم وحده.
+            </div>
           </div>
         )}
 
@@ -1322,7 +1906,7 @@ function ClinicalCases({ darkMode, onBack }) {
                     color: colors.muted,
                     marginTop: 5,
                   }}>
-                    {selectedSpecialty.ar} · {selectedCase.title} · AI Simulation
+                    {selectedSpecialty.ar} · AI Simulation
                   </p>
                 </div>
               </div>
@@ -1428,12 +2012,8 @@ function ClinicalCases({ darkMode, onBack }) {
                     borderRadius: 13,
                     background:
                       m.from === "doctor"
-                        ? dark
-                          ? "#203344"
-                          : "#e0f2fe"
-                        : dark
-                          ? "#123b3b"
-                          : "#e0f2f1",
+                        ? dark ? "#203344" : "#e0f2fe"
+                        : dark ? "#123b3b" : "#e0f2f1",
                     color: colors.text,
                     lineHeight: 1.9,
                     fontSize: 14,
