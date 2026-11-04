@@ -22,7 +22,6 @@ import {
   UserRound,
   Bot,
   Clock3,
-  ShieldCheck,
 } from "lucide-react";
 
 import Tutor from "./Tutor.jsx";
@@ -43,7 +42,7 @@ const tools = [
     icon: HeartPulse,
     title: "المساعد الصحي الذكي",
     subtitle: "AI Health Assistant",
-    desc: "افهم أعراضك واحصل على توجيه صحي مبدئي للمشكلة التي تواجهك.",
+    desc: "تحدث عن مشكلتك الصحية وافهم أعراضك واحصل على توجيه صحي مبدئي.",
     color: "#0D9488",
     bg: "#CCFBF1",
   },
@@ -93,6 +92,7 @@ function ClinicalCases({ darkMode, onBack }) {
   const [answer, setAnswer] = useState("");
   const [showResult, setShowResult] = useState(false);
   const [question, setQuestion] = useState("");
+
   const [messages, setMessages] = useState([
     {
       from: "patient",
@@ -124,17 +124,20 @@ function ClinicalCases({ darkMode, onBack }) {
   const resetCase = () => {
     setAnswer("");
     setShowResult(false);
+
     setMessages([
       {
         from: "patient",
         text: "مرحباً دكتور. أنا جاي المستشفى بسبب ألم في صدري بدأ من حوالي ساعتين.",
       },
     ]);
+
     setQuestion("");
   };
 
   const sendQuestion = (e) => {
     e.preventDefault();
+
     if (!question.trim()) return;
 
     const q = question.trim();
@@ -238,6 +241,7 @@ function ClinicalCases({ darkMode, onBack }) {
               <h1 style={{ fontSize: 27, fontWeight: 900 }}>
                 Clinical Cases
               </h1>
+
               <p style={{ color: "#d9f3ef", fontSize: 13 }}>
                 Learn clinical reasoning through real-world scenarios.
               </p>
