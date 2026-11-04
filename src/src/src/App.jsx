@@ -1,4 +1,3 @@
-
 import React, { useEffect, useRef, useState } from "react";
 import {
   Stethoscope,
@@ -26,6 +25,7 @@ import {
   AlertTriangle,
   Microscope,
   ClipboardCheck,
+  ArrowLeftRight,
 } from "lucide-react";
 
 import Tutor from "./Tutor.jsx";
@@ -180,16 +180,18 @@ function ClinicalCases({ darkMode, onBack }) {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
 
-  const chatEndRef = useRef(null);
   const inputRef = useRef(null);
   const abortRef = useRef(null);
 
-  // NEW: Track the beginning of each new AI reply.
   const [activePatientReplyId, setActivePatientReplyId] = useState(null);
   const [activeCaseReplyId, setActiveCaseReplyId] = useState(null);
 
   const patientReplyRef = useRef(null);
   const caseReplyRef = useRef(null);
+  const casePickerRef = useRef(null);
+
+  // Unique ID for every interactive session.
+  const caseSessionRef = useRef(null);
 
   const dark = darkMode;
 
@@ -241,8 +243,11 @@ function ClinicalCases({ darkMode, onBack }) {
     },
   };
 
-  const selectedReadyCase = readyCases[readyCaseId] || readyCases.chest_pain_001;
+  const selectedReadyCase =
+    readyCases[readyCaseId] || readyCases.chest_pain_001;
+
   const caseOptions = selectedReadyCase.options;
+  const readyCaseIds = Object.keys(readyCases);
 
   const pageStyle = {
     minHeight: "100vh",
@@ -290,7 +295,6 @@ function ClinicalCases({ darkMode, onBack }) {
   // AUTO-SCROLL TO THE START OF NEW REPLIES
   // ========================================
 
-  // Interactive patient: always follow the beginning of the newest patient reply.
   useEffect(() => {
     if (!patientReplyRef.current) return;
 
@@ -300,7 +304,6 @@ function ClinicalCases({ darkMode, onBack }) {
     });
   }, [messages, loading]);
 
-  // Ready-made case discussion: follow the beginning of the newest AI reply.
   useEffect(() => {
     if (!caseReplyRef.current) return;
 
@@ -311,7 +314,7 @@ function ClinicalCases({ darkMode, onBack }) {
   }, [caseChatMessages, caseChatLoading]);
 
 
-  // Stop reading when component unmounts.
+  // Stop active request when leaving the component.
   useEffect(() => {
     return () => {
       abortRef.current?.abort();
@@ -332,7 +335,38 @@ function ClinicalCases({ darkMode, onBack }) {
     setCaseChatMessages([]);
     setCaseChatError("");
     setActiveCaseReplyId(null);
+    setError("");
   };
+
+
+  function chooseReadyCase(id) {
+    if (!readyCases[id]) return;
+
+    setReadyCaseId(id);
+    resetCase();
+  }
+
+
+  function nextReadyCase() {
+    const currentIndex = readyCaseIds.indexOf(readyCaseId);
+
+    const nextIndex =
+      currentIndex < 0
+        ? 0
+        : (currentIndex + 1) % readyCaseIds.length;
+
+    const nextId = readyCaseIds[nextIndex];
+
+    chooseReadyCase(nextId);
+  }
+
+
+  function goToCasePicker() {
+    casePickerRef.current?.scrollIntoView({
+      behavior: "smooth",
+      block: "center",
+    });
+  }
 
 
   async function submitCaseAnswer() {
@@ -385,10 +419,8 @@ function ClinicalCases({ darkMode, onBack }) {
     }));
 
     const assistantId = `case-chat-${Date.now()}`;
-    const controller = new AbortController();
 
     setActiveCaseReplyId(assistantId);
-
     setCaseChatInput("");
     setCaseChatError("");
 
@@ -403,7 +435,6 @@ function ClinicalCases({ darkMode, onBack }) {
     try {
       const response = await fetch(API_URL, {
         method: "POST",
-        signal: controller.signal,
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           mode: "mcq_chat",
@@ -416,10 +447,12 @@ function ClinicalCases({ darkMode, onBack }) {
 
       if (!response.ok) {
         let messageText = "تعذر الاتصال بمساعد الحالة.";
+
         try {
           const data = await response.json();
           messageText = data.error || messageText;
         } catch {}
+
         throw new Error(messageText);
       }
 
@@ -429,14 +462,22 @@ function ClinicalCases({ darkMode, onBack }) {
 
       const reader = response.body.getReader();
       const decoder = new TextDecoder();
+
       let buffer = "";
       let receivedText = "";
       let finished = false;
 
       function processChatFrame(frame) {
         const lines = frame.split(/\r?\n/);
-        const eventName = lines.find(line => line.startsWith("event:"))?.slice(6).trim();
-        const dataLines = lines.filter(line => line.startsWith("data:")).map(line => line.slice(5).trim());
+
+        const eventName = lines
+          .find(line => line.startsWith("event:"))
+          ?.slice(6)
+          .trim();
+
+        const dataLines = lines
+          .filter(line => line.startsWith("data:"))
+          .map(line => line.slice(5).trim());
 
         if (!dataLines.length) return;
 
@@ -462,11 +503,13 @@ function ClinicalCases({ darkMode, onBack }) {
         if (typeof data.text === "string") {
           receivedText += data.text;
 
-          setCaseChatMessages(prev => prev.map(item =>
-            item.id === assistantId
-              ? { ...item, text: receivedText }
-              : item
-          ));
+          setCaseChatMessages(prev =>
+            prev.map(item =>
+              item.id === assistantId
+                ? { ...item, text: receivedText }
+                : item
+            )
+          );
         }
       }
 
@@ -509,23 +552,17 @@ function ClinicalCases({ darkMode, onBack }) {
 
 
   // ========================================
-  // STREAMING AI PATIENT CHAT
+  // INTERACTIVE PATIENT CHAT
   // ========================================
 
-  async function sendToPatient(
-    message,
-    isStarting = false
-  ) {
+  async function sendToPatient(message, isStarting = false) {
     if (loading) return;
 
     const currentQuestion = message.trim();
-
     if (!currentQuestion) return;
 
     const history = messages.map(m => ({
-      role: m.from === "doctor"
-        ? "user"
-        : "assistant",
+      role: m.from === "doctor" ? "user" : "assistant",
       text: m.text,
     }));
 
@@ -536,7 +573,6 @@ function ClinicalCases({ darkMode, onBack }) {
 
     abortRef.current = controller;
 
-    // NEW: Mark this as the newest patient reply.
     setActivePatientReplyId(patientMessageId);
 
     if (!isStarting) {
@@ -576,6 +612,7 @@ function ClinicalCases({ darkMode, onBack }) {
           mode: "clinical_patient",
           specialty: selectedSpecialty.name,
           caseId: selectedSpecialty.caseId,
+          caseSessionId: caseSessionRef.current,
           question: currentQuestion,
           history,
         }),
@@ -644,10 +681,7 @@ function ClinicalCases({ darkMode, onBack }) {
           setMessages(prev =>
             prev.map(m =>
               m.id === patientMessageId
-                ? {
-                    ...m,
-                    text: receivedText,
-                  }
+                ? { ...m, text: receivedText }
                 : m
             )
           );
@@ -682,9 +716,7 @@ function ClinicalCases({ darkMode, onBack }) {
       }
 
       if (!finished) {
-        throw new Error(
-          "الرد وصل بشكل غير مكتمل. أعد المحاولة."
-        );
+        throw new Error("الرد وصل بشكل غير مكتمل. أعد المحاولة.");
       }
 
     } catch (err) {
@@ -692,9 +724,7 @@ function ClinicalCases({ darkMode, onBack }) {
 
       console.error("Clinical patient error:", err);
 
-      setError(
-        err.message || "حصلت مشكلة أثناء المحاكاة."
-      );
+      setError(err.message || "حصلت مشكلة أثناء المحاكاة.");
 
       setMessages(prev =>
         prev.filter(
@@ -721,13 +751,21 @@ function ClinicalCases({ darkMode, onBack }) {
   // ========================================
 
   function startInteractiveCase() {
+    if (loading) return;
+
+    const newSessionId =
+      `session-${Date.now()}-${Math.random().toString(36).slice(2, 9)}`;
+
+    caseSessionRef.current = newSessionId;
+
     setMessages([]);
     setError("");
     setQuestion("");
+    setActivePatientReplyId(null);
     setMode("interactive");
 
     sendToPatient(
-      "ابدأ المحاكاة بحالة سريرية مناسبة للتخصص المحدد. قدم نفسك للمريض كطبيب وابدأ أول جملة من المريض بشكل طبيعي. لا تكشف التشخيص.",
+      "ابدأ محاكاة سريرية جديدة تمامًا ومختلفة عن أي حالة سابقة. اختر مريضًا افتراضيًا جديدًا وسيناريو مناسبًا للتخصص المحدد، مع أعراض وتاريخ مرضي مختلفين. تصرف كمريض حقيقي ولا تكشف التشخيص أو نتائج الفحوصات من البداية. ابدأ بجملة طبيعية يذكر فيها المريض شكواه الرئيسية فقط.",
       true
     );
   }
@@ -745,24 +783,46 @@ function ClinicalCases({ darkMode, onBack }) {
     const currentQuestion = question.trim();
 
     setQuestion("");
-
     sendToPatient(currentQuestion);
   }
 
 
   // ========================================
-  // RESET INTERACTIVE CASE
+  // START ANOTHER CASE IN SAME SPECIALTY
   // ========================================
 
   function resetInteractiveCase() {
+    if (loading) return;
+
+    startInteractiveCase();
+  }
+
+
+  // ========================================
+  // FINISH CASE AND CHANGE SPECIALTY
+  // ========================================
+
+  function finishInteractiveCase() {
     if (loading) return;
 
     setMessages([]);
     setQuestion("");
     setError("");
     setActivePatientReplyId(null);
+    caseSessionRef.current = null;
 
-    startInteractiveCase();
+    setMode("choose-specialty");
+  }
+
+
+  // ========================================
+  // CHANGE SPECIALTY
+  // ========================================
+
+  function changeSpecialty(nextSpecialty) {
+    if (loading) return;
+
+    setSpecialty(nextSpecialty);
   }
 
 
@@ -774,7 +834,7 @@ function ClinicalCases({ darkMode, onBack }) {
 
         <button
           onClick={() => {
-            if (loading) return;
+            if (loading || caseChatLoading || grading) return;
 
             if (mode) {
               setMode(null);
@@ -1025,7 +1085,7 @@ function ClinicalCases({ darkMode, onBack }) {
         )}
 
 
-        {/* SPECIALTY SELECTION BEFORE INTERACTIVE CASE */}
+        {/* SPECIALTY SELECTION */}
 
         {mode === "choose-specialty" && (
           <div style={cardStyle}>
@@ -1067,7 +1127,7 @@ function ClinicalCases({ darkMode, onBack }) {
                 return (
                   <button
                     key={s.name}
-                    onClick={() => setSpecialty(s.name)}
+                    onClick={() => changeSpecialty(s.name)}
                     style={{
                       ...buttonStyle,
                       borderColor:
@@ -1114,9 +1174,7 @@ function ClinicalCases({ darkMode, onBack }) {
               <Bot size={26} color="#0D9488" />
 
               <div>
-                <strong>
-                  {selectedSpecialty.ar}
-                </strong>
+                <strong>{selectedSpecialty.ar}</strong>
 
                 <p style={{
                   fontSize: 12,
@@ -1196,27 +1254,51 @@ function ClinicalCases({ darkMode, onBack }) {
               {selectedReadyCase.title}
             </h2>
 
-            <div style={{ display: "flex", flexWrap: "wrap", gap: 8, marginTop: 16, marginBottom: 14 }}>
+
+            {/* CASE PICKER */}
+
+            <div
+              ref={casePickerRef}
+              style={{
+                display: "flex",
+                flexWrap: "wrap",
+                gap: 8,
+                marginTop: 16,
+                marginBottom: 14,
+                scrollMarginTop: 25,
+              }}
+            >
               {Object.entries(readyCases).map(([id, item]) => (
                 <button
                   key={id}
-                  onClick={() => {
-                    setReadyCaseId(id);
-                    resetCase();
-                  }}
+                  onClick={() => chooseReadyCase(id)}
                   style={{
                     ...buttonStyle,
                     width: "auto",
                     padding: "9px 12px",
                     fontSize: 12,
-                    borderColor: readyCaseId === id ? "#0D9488" : colors.border,
-                    background: readyCaseId === id ? (dark ? "#123b3b" : "#f0fdfa") : colors.card,
+                    borderColor:
+                      readyCaseId === id
+                        ? "#0D9488"
+                        : colors.border,
+                    background:
+                      readyCaseId === id
+                        ? (dark ? "#123b3b" : "#f0fdfa")
+                        : colors.card,
                   }}
                 >
-                  {item.specialty === "Internal Medicine" ? "الباطنة" : item.specialty === "Urology" ? "المسالك" : "النسا والتوليد"} · {item.title.split(" ").slice(0, 3).join(" ")}
+                  {item.specialty === "Internal Medicine"
+                    ? "الباطنة"
+                    : item.specialty === "Urology"
+                      ? "المسالك"
+                      : "النسا والتوليد"
+                  }
+                  {" · "}
+                  {item.title.split(" ").slice(0, 3).join(" ")}
                 </button>
               ))}
             </div>
+
 
             <div style={{
               background: colors.soft,
@@ -1244,7 +1326,9 @@ function ClinicalCases({ darkMode, onBack }) {
                   key={option}
                   disabled={showResult || grading}
                   onClick={() => {
-                    if (!showResult && !grading) setAnswer(option);
+                    if (!showResult && !grading) {
+                      setAnswer(option);
+                    }
                   }}
                   style={{
                     ...buttonStyle,
@@ -1260,10 +1344,7 @@ function ClinicalCases({ darkMode, onBack }) {
                           ? "#123b3b"
                           : "#f0fdfa"
                         : colors.card,
-                    fontWeight:
-                      answer === option
-                        ? 800
-                        : 500,
+                    fontWeight: answer === option ? 800 : 500,
                   }}
                 >
                   <span style={{
@@ -1275,24 +1356,28 @@ function ClinicalCases({ darkMode, onBack }) {
 
                   {option}
 
-                  {showResult && gradeResult?.correctAnswer === option && (
-                    <CheckCircle2
-                      color="#16A34A"
-                      size={18}
-                      style={{ float: "left" }}
-                    />
-                  )}
+                  {showResult &&
+                    gradeResult?.correctAnswer === option && (
+                      <CheckCircle2
+                        color="#16A34A"
+                        size={18}
+                        style={{ float: "left" }}
+                      />
+                    )}
 
-                  {showResult && answer === option && !gradeResult?.isCorrect && (
-                    <AlertTriangle
-                      color="#EF4444"
-                      size={18}
-                      style={{ float: "left" }}
-                    />
-                  )}
+                  {showResult &&
+                    answer === option &&
+                    !gradeResult?.isCorrect && (
+                      <AlertTriangle
+                        color="#EF4444"
+                        size={18}
+                        style={{ float: "left" }}
+                      />
+                    )}
                 </button>
               ))}
             </div>
+
 
             {!showResult ? (
               <button
@@ -1320,7 +1405,10 @@ function ClinicalCases({ darkMode, onBack }) {
                   color: gradeResult?.isCorrect ? "#16A34A" : "#EF4444",
                   marginBottom: 8,
                 }}>
-                  {gradeResult?.isCorrect ? "Correct Answer!" : "Not quite. Review the explanation."}
+                  {gradeResult?.isCorrect
+                    ? "Correct Answer!"
+                    : "Not quite. Review the explanation."
+                  }
                 </h3>
 
                 <strong>{gradeResult?.diagnosis}</strong>
@@ -1331,19 +1419,31 @@ function ClinicalCases({ darkMode, onBack }) {
 
                 <strong>Why each option?</strong>
 
-                <div style={{ display: "grid", gap: 10, marginTop: 8 }}>
+                <div style={{
+                  display: "grid",
+                  gap: 10,
+                  marginTop: 8,
+                }}>
                   {(gradeResult?.optionExplanations || []).map((item, index) => (
-                    <div key={item.option} style={{
-                      padding: 11,
-                      borderRadius: 10,
-                      background: colors.soft,
-                      border: `1px solid ${colors.border}`,
-                    }}>
-                      <strong style={{ color: item.correct ? "#16A34A" : colors.text }}>
+                    <div
+                      key={item.option}
+                      style={{
+                        padding: 11,
+                        borderRadius: 10,
+                        background: colors.soft,
+                        border: `1px solid ${colors.border}`,
+                      }}
+                    >
+                      <strong style={{
+                        color: item.correct ? "#16A34A" : colors.text,
+                      }}>
                         {String.fromCharCode(65 + index)}. {item.option}
                       </strong>
 
-                      <p style={{ fontSize: 13, margin: "4px 0 0" }}>
+                      <p style={{
+                        fontSize: 13,
+                        margin: "4px 0 0",
+                      }}>
                         {item.explanation}
                       </p>
                     </div>
@@ -1351,32 +1451,84 @@ function ClinicalCases({ darkMode, onBack }) {
                 </div>
 
                 <strong>Clinical Pearl:</strong>
-                <p style={{ fontSize: 14 }}>{gradeResult?.clinicalPearl}</p>
+                <p style={{ fontSize: 14 }}>
+                  {gradeResult?.clinicalPearl}
+                </p>
 
                 <strong>Exam Tip:</strong>
-                <p style={{ fontSize: 14 }}>{gradeResult?.examTip}</p>
+                <p style={{ fontSize: 14 }}>
+                  {gradeResult?.examTip}
+                </p>
+
+
+                {/* NEXT CASE ACTIONS */}
+
+                <div style={{
+                  display: "grid",
+                  gridTemplateColumns: "repeat(auto-fit,minmax(180px,1fr))",
+                  gap: 10,
+                  marginTop: 20,
+                }}>
+                  <button
+                    onClick={nextReadyCase}
+                    style={{
+                      ...primaryButton,
+                      display: "flex",
+                      alignItems: "center",
+                      justifyContent: "center",
+                      gap: 8,
+                    }}
+                  >
+                    <ArrowLeftRight size={17} />
+                    Next Case
+                  </button>
+
+                  <button
+                    onClick={goToCasePicker}
+                    style={{
+                      ...buttonStyle,
+                      width: "100%",
+                      display: "flex",
+                      alignItems: "center",
+                      justifyContent: "center",
+                      gap: 8,
+                    }}
+                  >
+                    <ClipboardList size={17} />
+                    Choose Another Case
+                  </button>
+                </div>
 
                 <button
                   onClick={resetCase}
                   style={{
-                    ...primaryButton,
-                    marginTop: 15,
+                    ...buttonStyle,
+                    marginTop: 10,
                     display: "flex",
                     alignItems: "center",
+                    justifyContent: "center",
                     gap: 7,
                   }}
                 >
                   <RotateCcw size={16} />
-                  Reset Case
+                  إعادة نفس الحالة
                 </button>
               </div>
             )}
 
+
             {error && !showResult && (
-              <p style={{ color: "#EF4444", fontSize: 13, marginTop: 10 }}>
+              <p style={{
+                color: "#EF4444",
+                fontSize: 13,
+                marginTop: 10,
+              }}>
                 {error}
               </p>
             )}
+
+
+            {/* CASE DISCUSSION */}
 
             {showResult && (
               <section style={{
@@ -1386,12 +1538,20 @@ function ClinicalCases({ darkMode, onBack }) {
                 borderRadius: 14,
                 background: colors.soft,
               }}>
-                <h3 style={{ margin: "0 0 6px", fontSize: 17 }}>
+                <h3 style={{
+                  margin: "0 0 6px",
+                  fontSize: 17,
+                }}>
                   Discuss this case with MedMind
                 </h3>
 
-                <p style={{ color: colors.muted, fontSize: 13, marginTop: 0 }}>
-                  اسأل عن التشخيص أو الـ ECG أو سبب استبعاد أي اختيار، واطلب شرحًا أبسط أو أعمق.
+                <p style={{
+                  color: colors.muted,
+                  fontSize: 13,
+                  marginTop: 0,
+                }}>
+                  اسأل عن التشخيص أو الـ ECG أو سبب استبعاد أي اختيار،
+                  واطلب شرحًا أبسط أو أعمق.
                 </p>
 
                 <div style={{
@@ -1407,19 +1567,27 @@ function ClinicalCases({ darkMode, onBack }) {
                       key={item.id || index}
                       ref={item.id === activeCaseReplyId ? caseReplyRef : null}
                       style={{
-                        alignSelf: item.from === "user" ? "flex-start" : "flex-end",
+                        alignSelf:
+                          item.from === "user"
+                            ? "flex-start"
+                            : "flex-end",
                         maxWidth: "90%",
                         padding: 12,
                         borderRadius: 12,
-                        background: item.from === "user"
-                          ? (dark ? "#203344" : "#e0f2fe")
-                          : (dark ? "#123b3b" : "#e0f2f1"),
+                        background:
+                          item.from === "user"
+                            ? (dark ? "#203344" : "#e0f2fe")
+                            : (dark ? "#123b3b" : "#e0f2f1"),
                         lineHeight: 1.8,
                         fontSize: 13,
                         whiteSpace: "pre-wrap",
                       }}
                     >
-                      <strong style={{ display: "block", fontSize: 11, marginBottom: 4 }}>
+                      <strong style={{
+                        display: "block",
+                        fontSize: 11,
+                        marginBottom: 4,
+                      }}>
                         {item.from === "user" ? "You" : "MedMind"}
                       </strong>
 
@@ -1428,19 +1596,31 @@ function ClinicalCases({ darkMode, onBack }) {
                   ))}
 
                   {caseChatLoading && (
-                    <p style={{ color: "#0D9488", fontSize: 12 }}>
+                    <p style={{
+                      color: "#0D9488",
+                      fontSize: 12,
+                    }}>
                       MedMind بيرد...
                     </p>
                   )}
                 </div>
 
                 {caseChatError && (
-                  <p style={{ color: "#EF4444", fontSize: 12 }}>
+                  <p style={{
+                    color: "#EF4444",
+                    fontSize: 12,
+                  }}>
                     {caseChatError}
                   </p>
                 )}
 
-                <form onSubmit={sendCaseChat} style={{ display: "flex", gap: 8 }}>
+                <form
+                  onSubmit={sendCaseChat}
+                  style={{
+                    display: "flex",
+                    gap: 8,
+                  }}
+                >
                   <input
                     value={caseChatInput}
                     onChange={event => setCaseChatInput(event.target.value)}
@@ -1463,10 +1643,16 @@ function ClinicalCases({ darkMode, onBack }) {
                     disabled={!caseChatInput.trim() || caseChatLoading}
                     style={{
                       ...primaryButton,
-                      opacity: !caseChatInput.trim() || caseChatLoading ? 0.5 : 1,
+                      opacity:
+                        !caseChatInput.trim() || caseChatLoading
+                          ? 0.5
+                          : 1,
                     }}
                   >
-                    {caseChatLoading ? <Loader2 size={18} /> : <Send size={18} />}
+                    {caseChatLoading
+                      ? <Loader2 size={18} />
+                      : <Send size={18} />
+                    }
                   </button>
                 </form>
               </section>
@@ -1492,7 +1678,6 @@ function ClinicalCases({ darkMode, onBack }) {
               paddingBottom: 16,
               marginBottom: 16,
             }}>
-
               <div style={{
                 display: "flex",
                 alignItems: "center",
@@ -1543,7 +1728,7 @@ function ClinicalCases({ darkMode, onBack }) {
                 }}
               >
                 <RotateCcw size={15} />
-                حالة جديدة
+                New Case
               </button>
             </div>
 
@@ -1559,10 +1744,7 @@ function ClinicalCases({ darkMode, onBack }) {
               alignItems: "center",
               gap: 9,
             }}>
-              <ClipboardCheck
-                size={21}
-                color="#0D9488"
-              />
+              <ClipboardCheck size={21} color="#0D9488" />
 
               <div>
                 <strong style={{ fontSize: 13 }}>
@@ -1594,7 +1776,6 @@ function ClinicalCases({ darkMode, onBack }) {
               flexDirection: "column",
               gap: 13,
             }}>
-
               {messages.length === 0 && !loading && (
                 <div style={{
                   textAlign: "center",
@@ -1602,10 +1783,7 @@ function ClinicalCases({ darkMode, onBack }) {
                   color: colors.muted,
                   padding: 30,
                 }}>
-                  <Bot
-                    size={40}
-                    color="#93c5fd"
-                  />
+                  <Bot size={40} color="#93c5fd" />
 
                   <p style={{
                     marginTop: 12,
@@ -1653,7 +1831,8 @@ function ClinicalCases({ darkMode, onBack }) {
                   }}>
                     {m.from === "doctor"
                       ? "Doctor (You)"
-                      : "Virtual Patient"}
+                      : "Virtual Patient"
+                    }
                   </div>
 
                   {m.text}
@@ -1677,8 +1856,6 @@ function ClinicalCases({ darkMode, onBack }) {
                   المريض بيرد...
                 </div>
               )}
-
-              <div ref={chatEndRef} />
             </div>
 
 
@@ -1782,25 +1959,68 @@ function ClinicalCases({ darkMode, onBack }) {
             {/* QUICK CLINICAL GUIDANCE */}
 
             {messages.length > 0 && (
-              <div style={{
-                marginTop: 16,
-                padding: 12,
-                borderRadius: 11,
-                background: colors.soft,
-              }}>
-                <p style={{
-                  fontSize: 12,
-                  color: colors.muted,
-                  lineHeight: 1.9,
+              <>
+                <div style={{
+                  marginTop: 16,
+                  padding: 12,
+                  borderRadius: 11,
+                  background: colors.soft,
                 }}>
-                  <strong style={{ color: colors.text }}>
-                    Your role:
-                  </strong>
+                  <p style={{
+                    fontSize: 12,
+                    color: colors.muted,
+                    lineHeight: 1.9,
+                  }}>
+                    <strong style={{ color: colors.text }}>
+                      Your role:
+                    </strong>
 
-                  {" "}ابدأ بـ History Taking، ثم اطلب الفحوصات اللازمة،
-                  وناقش التشخيص والتعامل مع الحالة.
-                </p>
-              </div>
+                    {" "}ابدأ بـ History Taking، ثم اطلب الفحوصات اللازمة،
+                    وناقش التشخيص والتعامل مع الحالة.
+                  </p>
+                </div>
+
+                {/* FINISH / CHANGE CASE */}
+
+                <div style={{
+                  display: "grid",
+                  gridTemplateColumns: "repeat(auto-fit,minmax(190px,1fr))",
+                  gap: 10,
+                  marginTop: 15,
+                }}>
+                  <button
+                    onClick={resetInteractiveCase}
+                    disabled={loading}
+                    style={{
+                      ...primaryButton,
+                      display: "flex",
+                      justifyContent: "center",
+                      alignItems: "center",
+                      gap: 8,
+                      opacity: loading ? 0.5 : 1,
+                    }}
+                  >
+                    <RotateCcw size={17} />
+                    حالة جديدة بنفس التخصص
+                  </button>
+
+                  <button
+                    onClick={finishInteractiveCase}
+                    disabled={loading}
+                    style={{
+                      ...buttonStyle,
+                      display: "flex",
+                      justifyContent: "center",
+                      alignItems: "center",
+                      gap: 8,
+                      opacity: loading ? 0.5 : 1,
+                    }}
+                  >
+                    <ArrowLeftRight size={17} />
+                    إنهاء الحالة وتغيير التخصص
+                  </button>
+                </div>
+              </>
             )}
 
             <p style={{
@@ -2026,19 +2246,15 @@ export default function App() {
                   onClick={() => {
                     if (tool.id === "assistant") {
                       setPage("tutor");
-
                     } else if (tool.id === "health") {
                       setPage("health");
-
                     } else if (tool.id === "cases") {
                       setPage("cases");
-
                     } else {
                       setSelected(tool.id);
                     }
                   }}
                 >
-
                   <div
                     className="dashboard-tool-icon"
                     style={{
@@ -2077,7 +2293,6 @@ export default function App() {
 
                     <ChevronLeft size={17} />
                   </span>
-
                 </button>
               );
             })}
