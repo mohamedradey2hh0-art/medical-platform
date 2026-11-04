@@ -84,54 +84,125 @@ const tools = [
 
 const THEME_KEY = "medmind-theme";
 
+
+// ==========================================
+// SPECIALTIES AND CASES
+// ==========================================
+
 const specialties = [
   {
     name: "Internal Medicine",
     ar: "الباطنة",
     icon: HeartPulse,
     color: "#0D9488",
-    caseId: "internal_chest_pain",
-    caseTitle: "Chest Pain",
+    cases: [
+      {
+        id: "internal_chest_pain",
+        title: "Chest Pain",
+        ar: "ألم الصدر",
+      },
+    ],
   },
   {
     name: "Pediatrics",
     ar: "الأطفال",
     icon: UserRound,
     color: "#2563EB",
-    caseId: "pediatrics_fever",
-    caseTitle: "Pediatric Fever",
+    cases: [
+      {
+        id: "pediatrics_fever",
+        title: "Pediatric Fever",
+        ar: "ارتفاع الحرارة عند الأطفال",
+      },
+    ],
   },
   {
     name: "Surgery",
     ar: "الجراحة",
     icon: Activity,
     color: "#D97706",
-    caseId: "surgery_abdominal_pain",
-    caseTitle: "Acute Abdominal Pain",
+    cases: [
+      {
+        id: "surgery_abdominal_pain",
+        title: "Acute Abdominal Pain",
+        ar: "ألم البطن الحاد",
+      },
+    ],
   },
   {
     name: "Cardiology",
     ar: "القلب",
     icon: HeartPulse,
     color: "#E11D48",
-    caseId: "cardiology_palpitations",
-    caseTitle: "Palpitations",
+    cases: [
+      {
+        id: "cardiology_palpitations",
+        title: "Palpitations",
+        ar: "خفقان القلب",
+      },
+    ],
   },
   {
     name: "Neurology",
     ar: "المخ والأعصاب",
     icon: Brain,
     color: "#7C3AED",
-    caseId: "neurology_headache",
-    caseTitle: "Headache",
+    cases: [
+      {
+        id: "neurology_headache",
+        title: "Headache",
+        ar: "الصداع",
+      },
+    ],
   },
   {
     name: "Emergency",
     ar: "الطوارئ",
     icon: Activity,
     color: "#EA580C",
-    caseId: "emergency_trauma",
-    caseTitle: "Emergency Assessment",
+    cases: [
+      {
+        id: "emergency_trauma",
+        title: "Emergency Assessment",
+        ar: "إصابات الطوارئ",
+      },
+    ],
+  },
+  {
+    name: "Obstetrics & Gynecology",
+    ar: "النساء والتوليد",
+    icon: HeartPulse,
+    color: "#DB2777",
+    cases: [
+      {
+        id: "obgyn_ectopic_pregnancy",
+        title: "Ectopic Pregnancy",
+        ar: "الحمل خارج الرحم",
+      },
+      {
+        id: "obgyn_preeclampsia",
+        title: "Preeclampsia",
+        ar: "تسمم الحمل",
+      },
+    ],
+  },
+  {
+    name: "Urology",
+    ar: "المسالك البولية",
+    icon: Activity,
+    color: "#0284C7",
+    cases: [
+      {
+        id: "urology_renal_colic",
+        title: "Renal Colic",
+        ar: "المغص الكلوي",
+      },
+      {
+        id: "urology_acute_retention",
+        title: "Acute Urinary Retention",
+        ar: "احتباس البول الحاد",
+      },
+    ],
   },
 ];
 
@@ -145,6 +216,10 @@ function ClinicalCases({ darkMode, onBack }) {
 
   const [specialty, setSpecialty] = useState(
     "Internal Medicine"
+  );
+
+  const [selectedCaseId, setSelectedCaseId] = useState(
+    "internal_chest_pain"
   );
 
   const [answer, setAnswer] = useState("");
@@ -176,6 +251,16 @@ function ClinicalCases({ darkMode, onBack }) {
   const selectedSpecialty =
     specialties.find(s => s.name === specialty) ||
     specialties[0];
+
+  const selectedCase =
+    selectedSpecialty.cases.find(
+      c => c.id === selectedCaseId
+    ) || selectedSpecialty.cases[0];
+
+  function chooseSpecialty(s) {
+    setSpecialty(s.name);
+    setSelectedCaseId(s.cases[0].id);
+  }
 
   const caseOptions = [
     "Acute myocardial infarction",
@@ -241,6 +326,20 @@ function ClinicalCases({ darkMode, onBack }) {
       abortRef.current?.abort();
     };
   }, []);
+
+
+  // ========================================
+  // SPECIALTY SELECTION
+  // ========================================
+
+  function handleSpecialtyChange(s) {
+    chooseSpecialty(s);
+
+    // Clear previous session when specialty changes.
+    setMessages([]);
+    setQuestion("");
+    setError("");
+  }
 
 
   // ========================================
@@ -317,7 +416,7 @@ function ClinicalCases({ darkMode, onBack }) {
         body: JSON.stringify({
           mode: "clinical_patient",
           specialty: selectedSpecialty.name,
-          caseId: selectedSpecialty.caseId,
+          caseId: selectedCase.id,
           question: currentQuestion,
           history,
         }),
@@ -729,7 +828,7 @@ function ClinicalCases({ darkMode, onBack }) {
                 return (
                   <button
                     key={s.name}
-                    onClick={() => setSpecialty(s.name)}
+                    onClick={() => handleSpecialtyChange(s)}
                     style={{
                       ...buttonStyle,
                       borderColor:
@@ -798,6 +897,8 @@ function ClinicalCases({ darkMode, onBack }) {
               </div>
             </div>
 
+            {/* SPECIALTIES GRID */}
+
             <div style={{
               display: "grid",
               gridTemplateColumns: "repeat(auto-fit,minmax(140px,1fr))",
@@ -809,7 +910,7 @@ function ClinicalCases({ darkMode, onBack }) {
                 return (
                   <button
                     key={s.name}
-                    onClick={() => setSpecialty(s.name)}
+                    onClick={() => handleSpecialtyChange(s)}
                     style={{
                       ...buttonStyle,
                       borderColor:
@@ -844,6 +945,68 @@ function ClinicalCases({ darkMode, onBack }) {
               })}
             </div>
 
+
+            {/* CASE SELECTION */}
+
+            <h3 style={{
+              fontSize: 16,
+              marginTop: 25,
+              marginBottom: 12,
+            }}>
+              اختر الحالة السريرية
+            </h3>
+
+            <div style={{
+              display: "grid",
+              gridTemplateColumns: "repeat(auto-fit,minmax(200px,1fr))",
+              gap: 10,
+            }}>
+              {selectedSpecialty.cases.map(c => (
+                <button
+                  key={c.id}
+                  onClick={() => setSelectedCaseId(c.id)}
+                  style={{
+                    ...buttonStyle,
+                    borderColor:
+                      selectedCaseId === c.id
+                        ? selectedSpecialty.color
+                        : colors.border,
+                    background:
+                      selectedCaseId === c.id
+                        ? dark
+                          ? "#203344"
+                          : "#f0fdfa"
+                        : colors.card,
+                  }}
+                >
+                  <div style={{
+                    fontWeight: 800,
+                    marginBottom: 5,
+                  }}>
+                    {c.ar}
+                  </div>
+
+                  <div style={{
+                    color: colors.muted,
+                    fontSize: 12,
+                  }}>
+                    {c.title}
+                  </div>
+
+                  {selectedCaseId === c.id && (
+                    <CheckCircle2
+                      size={18}
+                      color={selectedSpecialty.color}
+                      style={{ marginTop: 8 }}
+                    />
+                  )}
+                </button>
+              ))}
+            </div>
+
+
+            {/* SELECTED CASE INFORMATION */}
+
             <div style={{
               marginTop: 22,
               padding: 15,
@@ -865,7 +1028,15 @@ function ClinicalCases({ darkMode, onBack }) {
                   color: colors.muted,
                   marginTop: 4,
                 }}>
-                  First case: {selectedSpecialty.caseTitle}
+                  Selected case: {selectedCase.title}
+                </p>
+
+                <p style={{
+                  fontSize: 12,
+                  color: colors.muted,
+                  marginTop: 3,
+                }}>
+                  {selectedCase.ar}
                 </p>
               </div>
             </div>
@@ -1151,7 +1322,7 @@ function ClinicalCases({ darkMode, onBack }) {
                     color: colors.muted,
                     marginTop: 5,
                   }}>
-                    {selectedSpecialty.ar} · AI Simulation
+                    {selectedSpecialty.ar} · {selectedCase.title} · AI Simulation
                   </p>
                 </div>
               </div>
