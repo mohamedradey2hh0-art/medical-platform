@@ -126,3 +126,7 @@ a { color: inherit; text-decoration: none; }
   .tutor-page { padding: 16px 10px; }
   .tutor-topbar { margin-bottom: 16px; }
 }
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after { scroll-behavior: auto !important; transition-duration: .01ms !important; }
+}
