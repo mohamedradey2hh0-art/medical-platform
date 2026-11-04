@@ -28,11 +28,14 @@ function isArabic(text) {
   return /[\u0600-\u06FF]/.test(text);
 }
 
-function FormattedAnswer({ text }) {
+function FormattedAnswer({ text, darkMode }) {
   const lines = text.split("\n");
   const elements = [];
   let listItems = [];
   let listType = null;
+
+  const textColor = darkMode ? "#e2e8f0" : "#1e293b";
+  const headingColor = darkMode ? "#93c5fd" : "#1e40af";
 
   function flushList() {
     if (!listItems.length) return;
@@ -45,7 +48,8 @@ function FormattedAnswer({ text }) {
         style={{
           paddingInlineStart: "25px",
           margin: "8px 0 14px",
-          lineHeight: 1.8
+          lineHeight: 1.8,
+          color: textColor
         }}
       >
         {listItems.map((item, index) => (
@@ -94,7 +98,7 @@ function FormattedAnswer({ text }) {
         <HeadingTag
           key={index}
           style={{
-            color: "#1e40af",
+            color: headingColor,
             margin: "18px 0 8px",
             fontSize: level === 1 ? "21px" : level === 2 ? "18px" : "16px",
             lineHeight: 1.5
@@ -116,7 +120,8 @@ function FormattedAnswer({ text }) {
           margin: "7px 0 12px",
           textAlign: arabic ? "right" : "left",
           lineHeight: 1.85,
-          fontSize: "15px"
+          fontSize: "15px",
+          color: textColor
         }}
       >
         {formatInline(trimmed)}
@@ -143,7 +148,6 @@ async function compressImage(file) {
       MAX_DIMENSION / Math.max(bitmap.width, bitmap.height)
     );
 
-    // Keep small PNG images unchanged.
     if (scale === 1 && file.type === "image/png") {
       bitmap.close();
       return file;
@@ -161,22 +165,12 @@ async function compressImage(file) {
       return file;
     }
 
-    ctx.drawImage(
-      bitmap,
-      0,
-      0,
-      canvas.width,
-      canvas.height
-    );
+    ctx.drawImage(bitmap, 0, 0, canvas.width, canvas.height);
 
     bitmap.close();
 
-    // Preserve PNG format for diagrams and text.
-    // Convert other supported images to JPEG.
     const outputType =
-      file.type === "image/png"
-        ? "image/png"
-        : "image/jpeg";
+      file.type === "image/png" ? "image/png" : "image/jpeg";
 
     const blob = await new Promise((resolve) => {
       canvas.toBlob(
@@ -192,9 +186,7 @@ async function compressImage(file) {
 
     return new File(
       [blob],
-      outputType === "image/jpeg"
-        ? "medmind-image.jpg"
-        : file.name,
+      outputType === "image/jpeg" ? "medmind-image.jpg" : file.name,
       { type: outputType }
     );
 
@@ -234,9 +226,16 @@ export default function Tutor({ onBack, darkMode = false, setDarkMode }) {
   const galleryInputRef = useRef(null);
   const cameraInputRef = useRef(null);
 
-  // Test Worker temporarily
   const API_URL =
     "https://medmind-test.mohamedradey2hh0.workers.dev/";
+
+  const pageBg = darkMode ? "#0f172a" : "#f5f7fb";
+  const cardBg = darkMode ? "#1e293b" : "#ffffff";
+  const primaryText = darkMode ? "#f1f5f9" : "#172554";
+  const secondaryText = darkMode ? "#cbd5e1" : "#64748b";
+  const borderColor = darkMode ? "#334155" : "#e2e8f0";
+  const inputBg = darkMode ? "#0f172a" : "#ffffff";
+  const inputText = darkMode ? "#f1f5f9" : "#1e293b";
 
   function scrollToNewQuestion() {
     setTimeout(() => {
@@ -386,10 +385,7 @@ export default function Tutor({ onBack, darkMode = false, setDarkMode }) {
       let imageMimeType = null;
 
       if (imageForRequest) {
-        // Compress automatically before uploading.
-        const optimizedImage = await compressImage(
-          imageForRequest.file
-        );
+        const optimizedImage = await compressImage(imageForRequest.file);
 
         imageData = await fileToBase64(optimizedImage);
         imageMimeType = optimizedImage.type;
@@ -553,10 +549,10 @@ export default function Tutor({ onBack, darkMode = false, setDarkMode }) {
       }}
       style={{
         minHeight: "100vh",
-        background: "#f5f7fb",
+        background: pageBg,
         padding: "25px 16px",
         fontFamily: "Cairo, sans-serif",
-        color: "#172554"
+        color: primaryText
       }}
     >
       {textSelection && (
@@ -599,6 +595,7 @@ export default function Tutor({ onBack, darkMode = false, setDarkMode }) {
           >
             <ArrowLeft size={17} style={{ verticalAlign: "middle" }} /> Back
           </button>
+
           <button
             type="button"
             className="theme-toggle tutor-theme-toggle"
@@ -613,10 +610,13 @@ export default function Tutor({ onBack, darkMode = false, setDarkMode }) {
 
         <div
           style={{
-            background: "white",
+            background: cardBg,
             padding: "25px",
             borderRadius: "18px",
-            boxShadow: "0 5px 25px #00000008"
+            boxShadow: darkMode
+              ? "0 5px 25px #00000030"
+              : "0 5px 25px #00000008",
+            color: primaryText
           }}
         >
           <div
@@ -633,7 +633,7 @@ export default function Tutor({ onBack, darkMode = false, setDarkMode }) {
             </h1>
           </div>
 
-          <p style={{ color: "#64748b", lineHeight: 1.6 }}>
+          <p style={{ color: secondaryText, lineHeight: 1.6 }}>
             Your intelligent medical learning companion.
             Ask questions and learn in your own way.
           </p>
@@ -643,7 +643,8 @@ export default function Tutor({ onBack, darkMode = false, setDarkMode }) {
               style={{
                 display: "block",
                 marginBottom: "12px",
-                fontWeight: "bold"
+                fontWeight: "bold",
+                color: primaryText
               }}
             >
               How would you like the explanation?
@@ -656,73 +657,57 @@ export default function Tutor({ onBack, darkMode = false, setDarkMode }) {
                 gap: "12px"
               }}
             >
-              <button
-                type="button"
-                onClick={() => setDepth("quick")}
-                style={{
-                  padding: "16px",
-                  borderRadius: "12px",
-                  border: depth === "quick"
-                    ? "2px solid #2563eb"
-                    : "1px solid #dbe3ef",
-                  background: depth === "quick" ? "#eff6ff" : "white",
-                  color: "#1e3a8a",
-                  cursor: "pointer",
-                  textAlign: "left"
-                }}
-              >
-                <div style={{
-                  display: "flex",
-                  alignItems: "center",
-                  gap: "8px",
-                  fontWeight: "bold"
-                }}>
-                  <Zap size={19} color="#2563eb" />
-                  Quick Answer
-                </div>
+              {[
+                {
+                  id: "quick",
+                  icon: <Zap size={19} color="#2563eb" />,
+                  title: "Quick Answer",
+                  description: "Short, direct answers with key points."
+                },
+                {
+                  id: "deep",
+                  icon: <BookOpen size={19} color="#2563eb" />,
+                  title: "Deep Explanation",
+                  description: "Step-by-step explanations, WHY, and clinical links."
+                }
+              ].map((item) => (
+                <button
+                  key={item.id}
+                  type="button"
+                  onClick={() => setDepth(item.id)}
+                  style={{
+                    padding: "16px",
+                    borderRadius: "12px",
+                    border: depth === item.id
+                      ? "2px solid #2563eb"
+                      : `1px solid ${borderColor}`,
+                    background: depth === item.id
+                      ? darkMode ? "#1e3a5f" : "#eff6ff"
+                      : inputBg,
+                    color: darkMode ? "#e2e8f0" : "#1e3a8a",
+                    cursor: "pointer",
+                    textAlign: "left"
+                  }}
+                >
+                  <div style={{
+                    display: "flex",
+                    alignItems: "center",
+                    gap: "8px",
+                    fontWeight: "bold"
+                  }}>
+                    {item.icon}
+                    {item.title}
+                  </div>
 
-                <div style={{
-                  marginTop: "7px",
-                  fontSize: "13px",
-                  color: "#64748b"
-                }}>
-                  Short, direct answers with key points.
-                </div>
-              </button>
-
-              <button
-                type="button"
-                onClick={() => setDepth("deep")}
-                style={{
-                  padding: "16px",
-                  border: depth === "deep"
-                    ? "2px solid #2563eb"
-                    : "1px solid #dbe3ef",
-                  borderRadius: "12px",
-                  background: depth === "deep" ? "#eff6ff" : "white",
-                  color: "#1e3a8a",
-                  cursor: "pointer",
-                  textAlign: "left"
-                }}
-              >
-                <div style={{
-                  display: "flex",
-                  alignItems: "center",
-                  gap: "8px",
-                  fontWeight: "bold"
-                }}>
-                  <BookOpen size={19} color="#2563eb" />
-                  Deep Explanation
-                </div>
-
-                <div style={{
-                  marginTop: "7px",
-                  fontSize: "13px",
-                  color: "#64748b"
-                }}>
-                  Step-by-step explanations, WHY, and clinical links.
-                </div>
-              </button>
+                  <div style={{
+                    marginTop: "7px",
+                    fontSize: "13px",
+                    color: secondaryText
+                  }}>
+                    {item.description}
+                  </div>
+                </button>
+              ))}
             </div>
           </div>
 
@@ -740,7 +725,7 @@ export default function Tutor({ onBack, darkMode = false, setDarkMode }) {
                 style={{
                   textAlign: "center",
                   padding: "35px 10px",
-                  color: "#64748b"
+                  color: secondaryText
                 }}
               >
                 <Brain size={38} color="#93c5fd" />
@@ -754,13 +739,17 @@ export default function Tutor({ onBack, darkMode = false, setDarkMode }) {
                 ref={index === latestUserIndex ? questionStartRef : null}
                 style={{
                   alignSelf: message.role === "user" ? "flex-end" : "stretch",
-                  background: message.role === "user" ? "#2563eb" : "#f8fafc",
-                  color: message.role === "user" ? "white" : "#1e293b",
+                  background: message.role === "user"
+                    ? "#2563eb"
+                    : darkMode ? "#1e293b" : "#f8fafc",
+                  color: message.role === "user"
+                    ? "#ffffff"
+                    : darkMode ? "#f1f5f9" : "#1e293b",
                   padding: "14px 17px",
                   borderRadius: "14px",
                   maxWidth: message.role === "user" ? "90%" : "100%",
                   border: message.role === "assistant"
-                    ? "1px solid #e2e8f0"
+                    ? `1px solid ${borderColor}`
                     : "none",
                   lineHeight: 1.7,
                   overflowWrap: "anywhere",
@@ -795,7 +784,10 @@ export default function Tutor({ onBack, darkMode = false, setDarkMode }) {
 
                 {message.role === "assistant" ? (
                   <>
-                    <FormattedAnswer text={message.text} />
+                    <FormattedAnswer
+                      text={message.text}
+                      darkMode={darkMode}
+                    />
 
                     {loading &&
                       message.id &&
@@ -852,10 +844,10 @@ export default function Tutor({ onBack, darkMode = false, setDarkMode }) {
                   position: "relative",
                   display: "inline-block",
                   marginBottom: "12px",
-                  border: "1px solid #dbe3ef",
+                  border: `1px solid ${borderColor}`,
                   borderRadius: "12px",
                   padding: "7px",
-                  background: "#f8fafc"
+                  background: darkMode ? "#0f172a" : "#f8fafc"
                 }}
               >
                 <img
@@ -894,7 +886,7 @@ export default function Tutor({ onBack, darkMode = false, setDarkMode }) {
 
                 <div style={{
                   fontSize: "12px",
-                  color: "#64748b",
+                  color: secondaryText,
                   marginTop: "5px"
                 }}>
                   {selectedImage.name}
@@ -919,6 +911,9 @@ export default function Tutor({ onBack, darkMode = false, setDarkMode }) {
               rows={4}
               style={{
                 ...fieldStyle,
+                background: inputBg,
+                color: inputText,
+                border: `1px solid ${borderColor}`,
                 resize: "vertical",
                 width: "100%",
                 boxSizing: "border-box",
@@ -998,7 +993,7 @@ export default function Tutor({ onBack, darkMode = false, setDarkMode }) {
 
           <p
             style={{
-              color: "#94a3b8",
+              color: darkMode ? "#94a3b8" : "#94a3b8",
               fontSize: "12px",
               marginTop: "20px",
               lineHeight: 1.5
@@ -1014,6 +1009,11 @@ export default function Tutor({ onBack, darkMode = false, setDarkMode }) {
         @keyframes medmindBlink {
           0%, 100% { opacity: 1; }
           50% { opacity: 0; }
+        }
+
+        #medmind-tutor textarea::placeholder {
+          color: ${darkMode ? "#94a3b8" : "#94a3b8"};
+          opacity: 1;
         }
       `}</style>
     </div>
