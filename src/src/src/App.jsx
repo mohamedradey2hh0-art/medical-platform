@@ -184,6 +184,13 @@ function ClinicalCases({ darkMode, onBack }) {
   const inputRef = useRef(null);
   const abortRef = useRef(null);
 
+  // NEW: Track the beginning of each new AI reply.
+  const [activePatientReplyId, setActivePatientReplyId] = useState(null);
+  const [activeCaseReplyId, setActiveCaseReplyId] = useState(null);
+
+  const patientReplyRef = useRef(null);
+  const caseReplyRef = useRef(null);
+
   const dark = darkMode;
 
   const colors = {
@@ -233,6 +240,7 @@ function ClinicalCases({ darkMode, onBack }) {
       options: ["Preeclampsia with severe features", "Gestational hypertension without severe features", "Chronic hypertension", "Simple migraine"],
     },
   };
+
   const selectedReadyCase = readyCases[readyCaseId] || readyCases.chest_pain_001;
   const caseOptions = selectedReadyCase.options;
 
@@ -277,13 +285,31 @@ function ClinicalCases({ darkMode, onBack }) {
     fontWeight: 800,
   };
 
-  // Scroll to latest chat message.
+
+  // ========================================
+  // AUTO-SCROLL TO THE START OF NEW REPLIES
+  // ========================================
+
+  // Interactive patient: always follow the beginning of the newest patient reply.
   useEffect(() => {
-    chatEndRef.current?.scrollIntoView({
-      behavior: "smooth",
-      block: "end",
+    if (!patientReplyRef.current) return;
+
+    patientReplyRef.current.scrollIntoView({
+      behavior: "auto",
+      block: "start",
     });
   }, [messages, loading]);
+
+  // Ready-made case discussion: follow the beginning of the newest AI reply.
+  useEffect(() => {
+    if (!caseReplyRef.current) return;
+
+    caseReplyRef.current.scrollIntoView({
+      behavior: "auto",
+      block: "start",
+    });
+  }, [caseChatMessages, caseChatLoading]);
+
 
   // Stop reading when component unmounts.
   useEffect(() => {
@@ -305,7 +331,9 @@ function ClinicalCases({ darkMode, onBack }) {
     setCaseChatInput("");
     setCaseChatMessages([]);
     setCaseChatError("");
+    setActiveCaseReplyId(null);
   };
+
 
   async function submitCaseAnswer() {
     if (!answer || showResult || grading) return;
@@ -339,6 +367,7 @@ function ClinicalCases({ darkMode, onBack }) {
     }
   }
 
+
   async function sendCaseChat(e) {
     e?.preventDefault();
 
@@ -358,13 +387,17 @@ function ClinicalCases({ darkMode, onBack }) {
     const assistantId = `case-chat-${Date.now()}`;
     const controller = new AbortController();
 
+    setActiveCaseReplyId(assistantId);
+
     setCaseChatInput("");
     setCaseChatError("");
+
     setCaseChatMessages(prev => [
       ...prev,
       { from: "user", text: message },
       { id: assistantId, from: "assistant", text: "" },
     ]);
+
     setCaseChatLoading(true);
 
     try {
@@ -375,7 +408,6 @@ function ClinicalCases({ darkMode, onBack }) {
         body: JSON.stringify({
           mode: "mcq_chat",
           caseId: readyCaseId,
-          // The Worker verifies that the student completed this case first.
           sessionToken: gradeResult?.sessionToken,
           question: message,
           history,
@@ -405,15 +437,18 @@ function ClinicalCases({ darkMode, onBack }) {
         const lines = frame.split(/\r?\n/);
         const eventName = lines.find(line => line.startsWith("event:"))?.slice(6).trim();
         const dataLines = lines.filter(line => line.startsWith("data:")).map(line => line.slice(5).trim());
+
         if (!dataLines.length) return;
 
         const rawData = dataLines.join("\n");
+
         if (rawData === "[DONE]") {
           finished = true;
           return;
         }
 
         let data;
+
         try {
           data = JSON.parse(rawData);
         } catch {
@@ -426,30 +461,47 @@ function ClinicalCases({ darkMode, onBack }) {
 
         if (typeof data.text === "string") {
           receivedText += data.text;
+
           setCaseChatMessages(prev => prev.map(item =>
-            item.id === assistantId ? { ...item, text: receivedText } : item
+            item.id === assistantId
+              ? { ...item, text: receivedText }
+              : item
           ));
         }
       }
 
       while (true) {
         const { value, done } = await reader.read();
+
         if (done) break;
+
         buffer += decoder.decode(value, { stream: true });
+
         const frames = buffer.split(/\r?\n\r?\n/);
         buffer = frames.pop() || "";
-        for (const frame of frames) processChatFrame(frame);
+
+        for (const frame of frames) {
+          processChatFrame(frame);
+        }
       }
 
       buffer += decoder.decode();
-      if (buffer.trim()) processChatFrame(buffer);
+
+      if (buffer.trim()) {
+        processChatFrame(buffer);
+      }
 
       if (!receivedText.trim() || !finished) {
         throw new Error("الرد وصل بشكل غير مكتمل. حاول مرة أخرى.");
       }
+
     } catch (err) {
       setCaseChatError(err.message || "حصلت مشكلة أثناء المحادثة.");
-      setCaseChatMessages(prev => prev.filter(item => item.id !== assistantId || item.text.trim()));
+
+      setCaseChatMessages(prev =>
+        prev.filter(item => item.id !== assistantId || item.text.trim())
+      );
+
     } finally {
       setCaseChatLoading(false);
     }
@@ -483,6 +535,9 @@ function ClinicalCases({ darkMode, onBack }) {
     const controller = new AbortController();
 
     abortRef.current = controller;
+
+    // NEW: Mark this as the newest patient reply.
+    setActivePatientReplyId(patientMessageId);
 
     if (!isStarting) {
       setMessages(prev => [
@@ -609,7 +664,6 @@ function ClinicalCases({ darkMode, onBack }) {
         });
 
         const frames = buffer.split(/\r?\n\r?\n/);
-
         buffer = frames.pop() || "";
 
         for (const frame of frames) {
@@ -706,6 +760,7 @@ function ClinicalCases({ darkMode, onBack }) {
     setMessages([]);
     setQuestion("");
     setError("");
+    setActivePatientReplyId(null);
 
     startInteractiveCase();
   }
@@ -1143,11 +1198,23 @@ function ClinicalCases({ darkMode, onBack }) {
 
             <div style={{ display: "flex", flexWrap: "wrap", gap: 8, marginTop: 16, marginBottom: 14 }}>
               {Object.entries(readyCases).map(([id, item]) => (
-                <button key={id} onClick={() => { setReadyCaseId(id); resetCase(); }} style={{
-                  ...buttonStyle, width: "auto", padding: "9px 12px", fontSize: 12,
-                  borderColor: readyCaseId === id ? "#0D9488" : colors.border,
-                  background: readyCaseId === id ? (dark ? "#123b3b" : "#f0fdfa") : colors.card,
-                }}>{item.specialty === "Internal Medicine" ? "الباطنة" : item.specialty === "Urology" ? "المسالك" : "النسا والتوليد"} · {item.title.split(" ").slice(0,3).join(" ")}</button>
+                <button
+                  key={id}
+                  onClick={() => {
+                    setReadyCaseId(id);
+                    resetCase();
+                  }}
+                  style={{
+                    ...buttonStyle,
+                    width: "auto",
+                    padding: "9px 12px",
+                    fontSize: 12,
+                    borderColor: readyCaseId === id ? "#0D9488" : colors.border,
+                    background: readyCaseId === id ? (dark ? "#123b3b" : "#f0fdfa") : colors.card,
+                  }}
+                >
+                  {item.specialty === "Internal Medicine" ? "الباطنة" : item.specialty === "Urology" ? "المسالك" : "النسا والتوليد"} · {item.title.split(" ").slice(0, 3).join(" ")}
+                </button>
               ))}
             </div>
 
@@ -1215,6 +1282,7 @@ function ClinicalCases({ darkMode, onBack }) {
                       style={{ float: "left" }}
                     />
                   )}
+
                   {showResult && answer === option && !gradeResult?.isCorrect && (
                     <AlertTriangle
                       color="#EF4444"
@@ -1262,6 +1330,7 @@ function ClinicalCases({ darkMode, onBack }) {
                 </p>
 
                 <strong>Why each option?</strong>
+
                 <div style={{ display: "grid", gap: 10, marginTop: 8 }}>
                   {(gradeResult?.optionExplanations || []).map((item, index) => (
                     <div key={item.option} style={{
@@ -1273,7 +1342,10 @@ function ClinicalCases({ darkMode, onBack }) {
                       <strong style={{ color: item.correct ? "#16A34A" : colors.text }}>
                         {String.fromCharCode(65 + index)}. {item.option}
                       </strong>
-                      <p style={{ fontSize: 13, margin: "4px 0 0" }}>{item.explanation}</p>
+
+                      <p style={{ fontSize: 13, margin: "4px 0 0" }}>
+                        {item.explanation}
+                      </p>
                     </div>
                   ))}
                 </div>
@@ -1301,7 +1373,9 @@ function ClinicalCases({ darkMode, onBack }) {
             )}
 
             {error && !showResult && (
-              <p style={{ color: "#EF4444", fontSize: 13, marginTop: 10 }}>{error}</p>
+              <p style={{ color: "#EF4444", fontSize: 13, marginTop: 10 }}>
+                {error}
+              </p>
             )}
 
             {showResult && (
@@ -1312,7 +1386,10 @@ function ClinicalCases({ darkMode, onBack }) {
                 borderRadius: 14,
                 background: colors.soft,
               }}>
-                <h3 style={{ margin: "0 0 6px", fontSize: 17 }}>Discuss this case with MedMind</h3>
+                <h3 style={{ margin: "0 0 6px", fontSize: 17 }}>
+                  Discuss this case with MedMind
+                </h3>
+
                 <p style={{ color: colors.muted, fontSize: 13, marginTop: 0 }}>
                   اسأل عن التشخيص أو الـ ECG أو سبب استبعاد أي اختيار، واطلب شرحًا أبسط أو أعمق.
                 </p>
@@ -1326,29 +1403,41 @@ function ClinicalCases({ darkMode, onBack }) {
                   marginBottom: 12,
                 }}>
                   {caseChatMessages.map((item, index) => (
-                    <div key={item.id || index} style={{
-                      alignSelf: item.from === "user" ? "flex-start" : "flex-end",
-                      maxWidth: "90%",
-                      padding: 12,
-                      borderRadius: 12,
-                      background: item.from === "user"
-                        ? (dark ? "#203344" : "#e0f2fe")
-                        : (dark ? "#123b3b" : "#e0f2f1"),
-                      lineHeight: 1.8,
-                      fontSize: 13,
-                      whiteSpace: "pre-wrap",
-                    }}>
+                    <div
+                      key={item.id || index}
+                      ref={item.id === activeCaseReplyId ? caseReplyRef : null}
+                      style={{
+                        alignSelf: item.from === "user" ? "flex-start" : "flex-end",
+                        maxWidth: "90%",
+                        padding: 12,
+                        borderRadius: 12,
+                        background: item.from === "user"
+                          ? (dark ? "#203344" : "#e0f2fe")
+                          : (dark ? "#123b3b" : "#e0f2f1"),
+                        lineHeight: 1.8,
+                        fontSize: 13,
+                        whiteSpace: "pre-wrap",
+                      }}
+                    >
                       <strong style={{ display: "block", fontSize: 11, marginBottom: 4 }}>
                         {item.from === "user" ? "You" : "MedMind"}
                       </strong>
+
                       {item.text}
                     </div>
                   ))}
-                  {caseChatLoading && <p style={{ color: "#0D9488", fontSize: 12 }}>MedMind بيرد...</p>}
+
+                  {caseChatLoading && (
+                    <p style={{ color: "#0D9488", fontSize: 12 }}>
+                      MedMind بيرد...
+                    </p>
+                  )}
                 </div>
 
                 {caseChatError && (
-                  <p style={{ color: "#EF4444", fontSize: 12 }}>{caseChatError}</p>
+                  <p style={{ color: "#EF4444", fontSize: 12 }}>
+                    {caseChatError}
+                  </p>
                 )}
 
                 <form onSubmit={sendCaseChat} style={{ display: "flex", gap: 8 }}>
@@ -1368,10 +1457,15 @@ function ClinicalCases({ darkMode, onBack }) {
                       fontFamily: "inherit",
                     }}
                   />
-                  <button type="submit" disabled={!caseChatInput.trim() || caseChatLoading} style={{
-                    ...primaryButton,
-                    opacity: !caseChatInput.trim() || caseChatLoading ? 0.5 : 1,
-                  }}>
+
+                  <button
+                    type="submit"
+                    disabled={!caseChatInput.trim() || caseChatLoading}
+                    style={{
+                      ...primaryButton,
+                      opacity: !caseChatInput.trim() || caseChatLoading ? 0.5 : 1,
+                    }}
+                  >
                     {caseChatLoading ? <Loader2 size={18} /> : <Send size={18} />}
                   </button>
                 </form>
@@ -1525,6 +1619,7 @@ function ClinicalCases({ darkMode, onBack }) {
               {messages.map((m, i) => (
                 <div
                   key={m.id || i}
+                  ref={m.id === activePatientReplyId ? patientReplyRef : null}
                   style={{
                     alignSelf:
                       m.from === "doctor"
