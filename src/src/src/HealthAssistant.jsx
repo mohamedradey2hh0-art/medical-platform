@@ -9,23 +9,55 @@ import {
   Sun,
   ShieldCheck,
   AlertTriangle,
-  MessageCircle
+  MessageCircle,
+  Trash2
 } from "lucide-react";
 
 const API_URL =
   "https://medmind-test.mohamedradey2hh0.workers.dev/";
+
+const STORAGE_KEY = "medmind-health-chat-v1";
+
+const INITIAL_MESSAGES = [
+  {
+    role: "assistant",
+    text: "أهلاً بيك في MedMind Health Assistant ❤️\n\nأنا هنا عشان أساعدك تفهم الأعراض وتعرف تتصرف إزاي بشكل آمن.\n\nاحكيلي، إيه المشكلة الصحية اللي بتواجهك؟"
+  }
+];
+
+// Load previous conversation from browser storage.
+function loadSavedMessages() {
+  try {
+    const saved = localStorage.getItem(STORAGE_KEY);
+
+    if (!saved) return INITIAL_MESSAGES;
+
+    const parsed = JSON.parse(saved);
+
+    if (!Array.isArray(parsed) || parsed.length === 0) {
+      return INITIAL_MESSAGES;
+    }
+
+    return parsed
+      .filter(message =>
+        message &&
+        ["user", "assistant"].includes(message.role) &&
+        typeof message.text === "string"
+      )
+      .slice(-200);
+
+  } catch (error) {
+    console.warn("Could not load saved conversation:", error);
+    return INITIAL_MESSAGES;
+  }
+}
 
 export default function HealthAssistant({
   onBack,
   darkMode = false,
   setDarkMode
 }) {
-  const [messages, setMessages] = useState([
-    {
-      role: "assistant",
-      text: "أهلاً بك في MedMind Health Assistant ❤️\n\nأنا هنا لمساعدتك على فهم الأعراض والمعلومات الصحية وتوجيهك للخطوة المناسبة.\n\nاحكي لي، إيه المشكلة الصحية اللي بتواجهك؟"
-    }
-  ]);
+  const [messages, setMessages] = useState(loadSavedMessages);
 
   const [question, setQuestion] = useState("");
   const [loading, setLoading] = useState(false);
@@ -44,11 +76,46 @@ export default function HealthAssistant({
     assistant: darkMode ? "#1e293b" : "#f8fafc"
   };
 
+  // Automatically save every conversation update.
+  useEffect(() => {
+    try {
+      localStorage.setItem(
+        STORAGE_KEY,
+        JSON.stringify(messages)
+      );
+    } catch (error) {
+      console.warn("Could not save conversation:", error);
+      setError("تعذر حفظ المحادثة على هذا الجهاز. تأكد من مساحة التخزين.");
+    }
+  }, [messages]);
+
+  // Scroll to latest message.
   useEffect(() => {
     bottomRef.current?.scrollIntoView({
       behavior: "smooth"
     });
   }, [messages, loading]);
+
+  // Start a new conversation.
+  function clearConversation() {
+    if (loading) return;
+
+    const confirmed = window.confirm(
+      "هل أنت متأكد إنك عايز تمسح المحادثة المحفوظة وتبدأ من جديد؟"
+    );
+
+    if (!confirmed) return;
+
+    setMessages(INITIAL_MESSAGES);
+    setQuestion("");
+    setError("");
+
+    try {
+      localStorage.removeItem(STORAGE_KEY);
+    } catch (error) {
+      console.warn("Could not clear saved conversation:", error);
+    }
+  }
 
   async function sendMessage(e) {
     e.preventDefault();
@@ -57,6 +124,7 @@ export default function HealthAssistant({
 
     const currentQuestion = question.trim();
 
+    // Include previous messages as context for Gemini.
     const history = messages.map(message => ({
       role: message.role,
       text: message.text
@@ -321,7 +389,7 @@ export default function HealthAssistant({
           />
 
           <div>
-            هذه الخدمة تقدم معلومات وتوجيهًا صحيًا مبدئيًا،
+            الخدمة تقدم معلومات وتوجيهًا صحيًا مبدئيًا،
             ولا تغني عن الكشف الطبي. في حالة الأعراض الطارئة
             اطلب المساعدة الطبية فورًا.
           </div>
@@ -339,30 +407,67 @@ export default function HealthAssistant({
             : "0 5px 20px #00000006"
         }}>
 
+          {/* Chat Header */}
+
           <div style={{
             display: "flex",
+            justifyContent: "space-between",
             alignItems: "center",
             gap: 10,
             paddingBottom: 15,
             borderBottom: `1px solid ${colors.border}`,
             marginBottom: 17
           }}>
-            <MessageCircle
-              size={22}
-              color="#0D9488"
-            />
 
-            <div>
-              <strong>المحادثة الصحية</strong>
+            <div style={{
+              display: "flex",
+              alignItems: "center",
+              gap: 10
+            }}>
+              <MessageCircle
+                size={22}
+                color="#0D9488"
+              />
 
-              <div style={{
-                color: colors.muted,
-                fontSize: 11
-              }}>
-                MedMind AI
+              <div>
+                <strong>المحادثة الصحية</strong>
+
+                <div style={{
+                  color: colors.muted,
+                  fontSize: 11
+                }}>
+                  المحادثة محفوظة على جهازك
+                </div>
               </div>
             </div>
+
+            <button
+              type="button"
+              onClick={clearConversation}
+              disabled={loading}
+              title="مسح المحادثة وبدء محادثة جديدة"
+              aria-label="مسح المحادثة"
+              style={{
+                display: "flex",
+                alignItems: "center",
+                gap: 6,
+                padding: "9px 11px",
+                borderRadius: 10,
+                border: `1px solid ${colors.border}`,
+                background: colors.soft,
+                color: "#EF4444",
+                cursor: loading ? "not-allowed" : "pointer",
+                opacity: loading ? 0.5 : 1,
+                fontFamily: "inherit",
+                fontSize: 12
+              }}
+            >
+              <Trash2 size={16} />
+              محادثة جديدة
+            </button>
           </div>
+
+          {/* Messages */}
 
           <div style={{
             minHeight: 250,
@@ -373,68 +478,77 @@ export default function HealthAssistant({
             gap: 13
           }}>
 
-            {messages.map((message, index) => (
-              <div
-                key={message.id || index}
-                style={{
-                  alignSelf:
-                    message.role === "user"
-                      ? "flex-start"
-                      : "flex-end",
+            {messages.map((message, index) => {
+              if (
+                message.role === "assistant" &&
+                !message.text
+              ) {
+                return null;
+              }
 
-                  maxWidth: "90%",
-                  background:
-                    message.role === "user"
-                      ? "#0D9488"
-                      : colors.assistant,
+              return (
+                <div
+                  key={message.id || index}
+                  style={{
+                    alignSelf:
+                      message.role === "user"
+                        ? "flex-start"
+                        : "flex-end",
 
-                  color:
-                    message.role === "user"
-                      ? "white"
-                      : colors.text,
+                    maxWidth: "90%",
 
-                  border:
-                    message.role === "assistant"
-                      ? `1px solid ${colors.border}`
-                      : "none",
+                    background:
+                      message.role === "user"
+                        ? "#0D9488"
+                        : colors.assistant,
 
-                  padding: "12px 15px",
-                  borderRadius: 14,
-                  fontSize: 14,
-                  lineHeight: 2,
-                  whiteSpace: "pre-wrap",
-                  overflowWrap: "anywhere"
-                }}
-              >
-                <div style={{
-                  fontSize: 11,
-                  fontWeight: 800,
-                  marginBottom: 5,
-                  opacity: 0.8
-                }}>
-                  {message.role === "user"
-                    ? "أنت"
-                    : "MedMind"
-                  }
+                    color:
+                      message.role === "user"
+                        ? "white"
+                        : colors.text,
+
+                    border:
+                      message.role === "assistant"
+                        ? `1px solid ${colors.border}`
+                        : "none",
+
+                    padding: "12px 15px",
+                    borderRadius: 14,
+                    fontSize: 14,
+                    lineHeight: 2,
+                    whiteSpace: "pre-wrap",
+                    overflowWrap: "anywhere"
+                  }}
+                >
+                  <div style={{
+                    fontSize: 11,
+                    fontWeight: 800,
+                    marginBottom: 5,
+                    opacity: 0.8
+                  }}>
+                    {message.role === "user"
+                      ? "أنت"
+                      : "MedMind"
+                    }
+                  </div>
+
+                  {message.text}
                 </div>
+              );
+            })}
 
-                {message.text}
+            {loading && (
+              <div style={{
+                color: "#0D9488",
+                display: "flex",
+                alignItems: "center",
+                gap: 8,
+                fontSize: 13
+              }}>
+                <Loader2 size={18} />
+                MedMind يفكر...
               </div>
-            ))}
-
-            {loading &&
-              messages[messages.length - 1]?.text === "" && (
-                <div style={{
-                  color: "#0D9488",
-                  display: "flex",
-                  alignItems: "center",
-                  gap: 8,
-                  fontSize: 13
-                }}>
-                  <Loader2 size={18} />
-                  MedMind يفكر...
-                </div>
-              )}
+            )}
 
             <div ref={bottomRef} />
           </div>
