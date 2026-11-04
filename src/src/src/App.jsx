@@ -133,6 +133,22 @@ const specialties = [
     caseId: "emergency_trauma",
     caseTitle: "Emergency Assessment",
   },
+  {
+    name: "Urology",
+    ar: "المسالك البولية",
+    icon: Activity,
+    color: "#0284C7",
+    caseId: "urology_renal_colic",
+    caseTitle: "Renal Colic / حصوة بالحالب",
+  },
+  {
+    name: "Obstetrics & Gynecology",
+    ar: "النسا والتوليد",
+    icon: HeartPulse,
+    color: "#DB2777",
+    caseId: "obgyn_ectopic_pregnancy",
+    caseTitle: "Ectopic Pregnancy / حمل خارج الرحم",
+  },
 ];
 
 
@@ -148,6 +164,7 @@ function ClinicalCases({ darkMode, onBack }) {
   );
 
   const [answer, setAnswer] = useState("");
+  const [readyCaseId, setReadyCaseId] = useState("chest_pain_001");
   const [showResult, setShowResult] = useState(false);
   const [gradeResult, setGradeResult] = useState(null);
   const [grading, setGrading] = useState(false);
@@ -184,12 +201,40 @@ function ClinicalCases({ darkMode, onBack }) {
     specialties.find(s => s.name === specialty) ||
     specialties[0];
 
-  const caseOptions = [
-    "Acute myocardial infarction",
-    "Gastroesophageal reflux disease",
-    "Musculoskeletal chest pain",
-    "Pneumonia",
-  ];
+  const readyCases = {
+    chest_pain_001: {
+      specialty: "Internal Medicine",
+      title: "Chest Pain in a 58-year-old Male",
+      stem: <>A 58-year-old male presents with severe central pressure-like chest pain for 2 hours, radiating to his left arm. He has hypertension and diabetes. <br/><strong>Vitals:</strong> BP 150/90, HR 105, RR 22, SpO₂ 95%. <br/><strong>ECG:</strong> ST elevation in II, III and aVF with reciprocal depression in I and aVL. <br/><strong>Troponin:</strong> 96 ng/L, rising to 540 ng/L after 3 hours.</>,
+      options: ["Acute myocardial infarction", "Gastroesophageal reflux disease", "Musculoskeletal chest pain", "Pneumonia"],
+    },
+    urology_renal_colic: {
+      specialty: "Urology",
+      title: "Acute Flank Pain in a 32-year-old Male",
+      stem: <>A 32-year-old man presents with sudden severe right flank pain radiating to the groin, associated with nausea and microscopic hematuria. He is afebrile and hemodynamically stable. <br/><strong>Urinalysis:</strong> microscopic blood, no nitrites or significant pyuria. <br/><strong>Imaging:</strong> non-contrast CT shows a 6 mm distal right ureteric calculus with mild hydroureteronephrosis.</>,
+      options: ["Ureteric stone (renal colic)", "Acute pyelonephritis", "Acute appendicitis", "Abdominal aortic aneurysm"],
+    },
+    urology_acute_retention: {
+      specialty: "Urology",
+      title: "Acute Urinary Retention in a 70-year-old Male",
+      stem: <>A 70-year-old man presents with painful inability to pass urine for 10 hours and lower abdominal distension. He reports months of weak stream, hesitancy and nocturia. He is afebrile. Bladder scan shows approximately 850 mL retained urine.</>,
+      options: ["Acute urinary retention due to benign prostatic enlargement", "Acute glomerulonephritis", "Renal colic", "Stress urinary incontinence"],
+    },
+    obgyn_ectopic_pregnancy: {
+      specialty: "Obstetrics & Gynecology",
+      title: "Early Pregnancy with Pelvic Pain",
+      stem: <>A 27-year-old woman presents with 6 weeks of amenorrhea, right-sided pelvic pain and light vaginal bleeding. Urine pregnancy test is positive. Transvaginal ultrasound shows no definite intrauterine pregnancy and a right adnexal mass. She requires urgent assessment for ectopic pregnancy and possible rupture.</>,
+      options: ["Ectopic pregnancy", "Threatened miscarriage", "Pelvic inflammatory disease", "Ovarian cyst without complication"],
+    },
+    obgyn_preeclampsia: {
+      specialty: "Obstetrics & Gynecology",
+      title: "Hypertension in a 34-week Pregnancy",
+      stem: <>A 29-year-old primigravida at 34 weeks presents with severe headache and blurred vision. BP is 168/112 mmHg on repeat measurement. Urine protein is positive and platelet count is reduced. This is a maternal emergency requiring urgent obstetric assessment.</>,
+      options: ["Preeclampsia with severe features", "Gestational hypertension without severe features", "Chronic hypertension", "Simple migraine"],
+    },
+  };
+  const selectedReadyCase = readyCases[readyCaseId] || readyCases.chest_pain_001;
+  const caseOptions = selectedReadyCase.options;
 
   const pageStyle = {
     minHeight: "100vh",
@@ -274,7 +319,7 @@ function ClinicalCases({ darkMode, onBack }) {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           mode: "mcq_grade",
-          caseId: "chest_pain_001",
+          caseId: readyCaseId,
           answer,
         }),
       });
@@ -329,7 +374,7 @@ function ClinicalCases({ darkMode, onBack }) {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           mode: "mcq_chat",
-          caseId: "chest_pain_001",
+          caseId: readyCaseId,
           // The Worker verifies that the student completed this case first.
           sessionToken: gradeResult?.sessionToken,
           question: message,
@@ -1074,7 +1119,7 @@ function ClinicalCases({ darkMode, onBack }) {
                 fontWeight: 800,
                 fontSize: 13,
               }}>
-                Internal Medicine · Case 001
+                {selectedReadyCase.specialty} · Clinical Case
               </span>
 
               <span style={{
@@ -1093,8 +1138,18 @@ function ClinicalCases({ darkMode, onBack }) {
               fontSize: 22,
               margin: "18px 0 12px",
             }}>
-              Chest Pain in a 58-year-old Male
+              {selectedReadyCase.title}
             </h2>
+
+            <div style={{ display: "flex", flexWrap: "wrap", gap: 8, marginTop: 16, marginBottom: 14 }}>
+              {Object.entries(readyCases).map(([id, item]) => (
+                <button key={id} onClick={() => { setReadyCaseId(id); resetCase(); }} style={{
+                  ...buttonStyle, width: "auto", padding: "9px 12px", fontSize: 12,
+                  borderColor: readyCaseId === id ? "#0D9488" : colors.border,
+                  background: readyCaseId === id ? (dark ? "#123b3b" : "#f0fdfa") : colors.card,
+                }}>{item.specialty === "Internal Medicine" ? "الباطنة" : item.specialty === "Urology" ? "المسالك" : "النسا والتوليد"} · {item.title.split(" ").slice(0,3).join(" ")}</button>
+              ))}
+            </div>
 
             <div style={{
               background: colors.soft,
@@ -1103,30 +1158,7 @@ function ClinicalCases({ darkMode, onBack }) {
               lineHeight: 2,
               fontSize: 14,
             }}>
-              A 58-year-old male presents to the emergency department with
-              severe central chest pain for 2 hours. The pain is described as
-              pressure-like and radiates to his left arm. He has a history of
-              hypertension and diabetes mellitus.
-
-              <br />
-
-              <strong>Vital signs:</strong>
-
-              <br />
-
-              BP: 150/90 mmHg · HR: 105 bpm · RR: 22/min · SpO₂: 95%
-
-              <br />
-
-              <strong>Initial investigations:</strong>
-
-              <br />
-
-              ECG: ST elevation in leads II, III and aVF, with reciprocal ST depression in I and aVL.
-
-              <br />
-
-              High-sensitivity troponin: 96 ng/L (upper reference limit 26 ng/L), rising to 540 ng/L after 3 hours.
+              {selectedReadyCase.stem}
             </div>
 
             <h3 style={{
@@ -1245,13 +1277,6 @@ function ClinicalCases({ darkMode, onBack }) {
                     </div>
                   ))}
                 </div>
-
-                <strong style={{ display: "block", marginTop: 15 }}>Important investigations:</strong>
-                <ul style={{ paddingRight: 22, fontSize: 14 }}>
-                  <li>Immediate 12-lead ECG.</li>
-                  <li>Serial cardiac troponins.</li>
-                  <li>Continuous cardiac monitoring.</li>
-                </ul>
 
                 <strong>Clinical Pearl:</strong>
                 <p style={{ fontSize: 14 }}>{gradeResult?.clinicalPearl}</p>
