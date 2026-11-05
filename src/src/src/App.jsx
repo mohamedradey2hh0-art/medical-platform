@@ -1786,230 +1786,206 @@ function ClinicalCases({ darkMode, onBack }) {
 // ==========================================
 
 function ExamStudio({ darkMode, onBack }) {
+  const DEFAULT_TOPICS = [
+    "Growth & Development", "Immunization", "Nutrition", "Infections",
+    "Respiratory", "Cardiology", "Endocrinology & DKA", "Neurology"
+  ];
+  const TOPICS_KEY = "nebras-exam-studio-topics-v2";
   const [fileName, setFileName] = useState("");
   const [examText, setExamText] = useState("");
-  const [instruction, setInstruction] = useState("حوّل محتوى الامتحان إلى أسئلة MCQ مرتبة، وحدد الإجابة الصحيحة واشرح كل اختيار بالعامية المصرية مع الحفاظ على المصطلحات الطبية بالإنجليزي.");
-  const [result, setResult] = useState("");
+  const [topicsText, setTopicsText] = useState(() => {
+    try { return localStorage.getItem(TOPICS_KEY) || DEFAULT_TOPICS.join("\n"); }
+    catch { return DEFAULT_TOPICS.join("\n"); }
+  });
+  const [questions, setQuestions] = useState([]);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   const [status, setStatus] = useState("");
-  const [questionCount, setQuestionCount] = useState("كل الأسئلة الموجودة");
+  const [selectedChapter, setSelectedChapter] = useState("All");
+  const [quizQuestions, setQuizQuestions] = useState(null);
+  const [quizIndex, setQuizIndex] = useState(0);
+  const [quizAnswers, setQuizAnswers] = useState({});
+  const [showQuizResult, setShowQuizResult] = useState(false);
   const dark = darkMode;
   const palette = {
-    page: dark ? "#0b1220" : "#f4f7fb",
-    card: dark ? "#151f30" : "#ffffff",
-    text: dark ? "#e5edf7" : "#172b4d",
-    muted: dark ? "#a8b6c9" : "#64748b",
-    border: dark ? "#29364a" : "#e5eaf0",
-    soft: dark ? "#1e293b" : "#f1f5f9",
-    accent: "#0D9488",
+    page: dark ? "#0b1220" : "#f4f7fb", card: dark ? "#151f30" : "#ffffff",
+    text: dark ? "#e5edf7" : "#172b4d", muted: dark ? "#a8b6c9" : "#64748b",
+    border: dark ? "#29364a" : "#e5eaf0", soft: dark ? "#1e293b" : "#f1f5f9", accent: "#0D9488"
   };
-
+  const topics = [...new Set(topicsText.split(/\r?\n|,/).map(x => x.trim()).filter(Boolean))];
   const loadScript = (src, test) => new Promise((resolve, reject) => {
     if (test()) return resolve();
     const existing = document.querySelector(`script[data-nebras-src="${src}"]`);
-    if (existing) {
-      existing.addEventListener("load", resolve, { once: true });
-      existing.addEventListener("error", reject, { once: true });
-      return;
-    }
-    const script = document.createElement("script");
-    script.src = src;
-    script.async = true;
-    script.dataset.nebrasSrc = src;
-    script.onload = resolve;
-    script.onerror = () => reject(new Error("تعذر تحميل أداة قراءة الملف. اتأكد من اتصال الإنترنت أو انسخ نص الامتحان في المربع."));
-    document.head.appendChild(script);
+    if (existing) { existing.addEventListener("load", resolve, { once: true }); existing.addEventListener("error", reject, { once: true }); return; }
+    const script = document.createElement("script"); script.src = src; script.async = true; script.dataset.nebrasSrc = src;
+    script.onload = resolve; script.onerror = () => reject(new Error("تعذر تحميل أداة قراءة الملف. اتأكد من الإنترنت أو الصق نص الامتحان.")); document.head.appendChild(script);
   });
-
-  const extractFileText = async (file) => {
+  const extractFileText = async file => {
     const ext = file.name.split(".").pop().toLowerCase();
-    if (file.size > 12 * 1024 * 1024) throw new Error("حجم الملف أكبر من 12 MB. قلّل حجمه أو ارفع نسخة أصغر.");
-    if (["txt", "md", "csv"].includes(ext)) return await file.text();
+    if (file.size > 12 * 1024 * 1024) throw new Error("حجم الملف أكبر من 12 MB.");
+    if (["txt", "md", "csv"].includes(ext)) return file.text();
     if (ext === "pdf") {
       await loadScript("https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js", () => Boolean(window.pdfjsLib));
-      const pdfjs = window.pdfjsLib;
-      pdfjs.GlobalWorkerOptions.workerSrc = "https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js";
-      const bytes = new Uint8Array(await file.arrayBuffer());
-      const pdf = await pdfjs.getDocument({ data: bytes }).promise;
+      const pdfjs = window.pdfjsLib; pdfjs.GlobalWorkerOptions.workerSrc = "https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js";
+      const pdf = await pdfjs.getDocument({ data: new Uint8Array(await file.arrayBuffer()) }).promise;
       const pages = [];
-      for (let pageNo = 1; pageNo <= pdf.numPages; pageNo++) {
-        const page = await pdf.getPage(pageNo);
-        const content = await page.getTextContent();
-        pages.push(content.items.map(item => item.str).join(" "));
-      }
+      for (let n = 1; n <= pdf.numPages; n++) { const page = await pdf.getPage(n); const content = await page.getTextContent(); pages.push(content.items.map(x => x.str).join(" ")); }
       return pages.join("\n\n");
     }
     if (ext === "docx") {
       await loadScript("https://cdnjs.cloudflare.com/ajax/libs/mammoth/1.8.0/mammoth.browser.min.js", () => Boolean(window.mammoth));
-      const buffer = await file.arrayBuffer();
-      const extracted = await window.mammoth.extractRawText({ arrayBuffer: buffer });
-      return extracted.value || "";
+      return (await window.mammoth.extractRawText({ arrayBuffer: await file.arrayBuffer() })).value || "";
     }
-    throw new Error("الصيغ المدعومة: PDF وDOCX وTXT وMD وCSV. لو الملف DOC حوّله إلى DOCX الأول.");
+    throw new Error("الصيغ المدعومة: PDF وDOCX وTXT وMD وCSV.");
   };
-
-  const handleFile = async (event) => {
-    const file = event.target.files?.[0];
-    if (!file) return;
-    setError(""); setStatus("جاري قراءة الملف..."); setResult("");
-    try {
-      const extracted = await extractFileText(file);
-      if (!extracted.trim()) throw new Error("مش قادر أستخرج نص من الملف. لو PDF عبارة عن صور ممسوحة ضوئيًا، استخدم OCR أو انسخ النص هنا.");
-      setExamText(extracted);
-      setFileName(file.name);
-      const estimatedParts = Math.ceil(extracted.length / 20000);
-      setStatus(`تمت قراءة الملف بنجاح (${extracted.length.toLocaleString()} حرف). سيتم تقسيمه تلقائيًا إلى ${estimatedParts} جزء أثناء التحليل.`);
-    } catch (e) {
-      setError(e.message || "حصلت مشكلة أثناء قراءة الملف."); setStatus("");
-    }
+  const handleFile = async event => {
+    const file = event.target.files?.[0]; if (!file) return;
+    setError(""); setStatus("جاري قراءة الملف..."); setQuestions([]);
+    try { const text = await extractFileText(file); if (!text.trim()) throw new Error("لم أستطع استخراج نص. قد يحتاج الملف المصوّر إلى OCR."); setExamText(text); setFileName(file.name); setStatus(`تمت قراءة الملف (${text.length.toLocaleString()} حرف).`); }
+    catch (e) { setError(e.message || "تعذرت قراءة الملف."); setStatus(""); }
     event.target.value = "";
   };
-
-  const parseStream = async (response, previousOutput = "") => {
-    if (!response.ok) {
-      let message = "حصلت مشكلة في الاتصال بالمساعد.";
-      try { message = (await response.json()).error || message; } catch {}
-      throw new Error(message);
+  const splitExamIntoChunks = (source, maxChars = 9000) => {
+    const chunks = []; let rest = source.trim();
+    while (rest.length > maxChars) {
+      let cut = Math.max(rest.lastIndexOf("\n\n", maxChars), rest.lastIndexOf("\n", maxChars));
+      if (cut < maxChars * .5) cut = maxChars;
+      chunks.push(rest.slice(0, cut).trim()); rest = rest.slice(cut).trim();
     }
-    if (!response.body) throw new Error("السيرفر لم يرجع محتوى.");
-    const reader = response.body.getReader();
-    const decoder = new TextDecoder();
-    let buffer = "";
-    let output = previousOutput;
-    if (output) setResult(output);
-    while (true) {
-      const { value, done } = await reader.read();
-      if (done) break;
-      buffer += decoder.decode(value, { stream: true });
-      const frames = buffer.split(/\r?\n\r?\n/);
-      buffer = frames.pop() || "";
-      for (const frame of frames) {
-        const data = frame.split(/\r?\n/).filter(line => line.startsWith("data:")).map(line => line.slice(5).trim()).join("\n");
-        if (!data || data === "[DONE]") continue;
-        try {
-          const parsed = JSON.parse(data);
-          if (parsed.text) { output += parsed.text; setResult(output); }
-          if (parsed.error) throw new Error(parsed.error);
-        } catch (e) {
-          if (e instanceof SyntaxError) continue;
-          throw e;
-        }
-      }
-    }
-    if (!output.trim()) throw new Error("الرد وصل فاضي. جرّب تاني أو قلّل حجم الملف.");
-    return output;
+    if (rest) chunks.push(rest); return chunks;
   };
-
-  const splitExamIntoChunks = (text, maxChars = 20000) => {
-    const chunks = [];
-    let remaining = text.trim();
-    while (remaining.length > maxChars) {
-      let cut = remaining.lastIndexOf("\n\n", maxChars);
-      if (cut < maxChars * 0.55) cut = remaining.lastIndexOf("\n", maxChars);
-      if (cut < maxChars * 0.55) cut = remaining.lastIndexOf(". ", maxChars);
-      if (cut < maxChars * 0.55) cut = maxChars;
-      else if (remaining.slice(cut, cut + 2) === "\n\n") cut += 2;
-      else if (remaining[cut] === "\n") cut += 1;
-      else if (remaining.slice(cut, cut + 2) === ". ") cut += 2;
-      chunks.push(remaining.slice(0, cut).trim());
-      remaining = remaining.slice(cut).trim();
-    }
-    if (remaining) chunks.push(remaining);
-    return chunks;
+  const parseJsonQuestions = raw => {
+    const cleaned = raw.replace(/^```(?:json)?\s*/i, "").replace(/\s*```$/, "").trim();
+    const first = cleaned.indexOf("{"); const last = cleaned.lastIndexOf("}");
+    if (first < 0 || last <= first) throw new Error("تعذر قراءة النتيجة المنظمة من المحرك. جرّب تقسيم الملف أو تقليل حجمه.");
+    const data = JSON.parse(cleaned.slice(first, last + 1));
+    if (!Array.isArray(data.questions)) throw new Error("المحرك لم يرجع قائمة أسئلة صالحة.");
+    return data.questions;
   };
-
   const generateExam = async () => {
-    if (!examText.trim()) { setError("ارفع ملف الامتحان أو الصق نصه الأول."); return; }
-    setBusy(true); setError(""); setResult("");
+    if (!examText.trim()) { setError("ارفع ملف الامتحان أو الصق النص أولًا."); return; }
+    if (!topics.length) { setError("اكتب أسماء الموضوعات، كل موضوع في سطر منفصل."); return; }
+    setBusy(true); setError(""); setStatus("بدء استخراج وتصنيف الأسئلة..."); setQuestions([]); setQuizQuestions(null);
     try {
+      try { localStorage.setItem(TOPICS_KEY, topics.join("\n")); } catch {}
+      // Keep the answer-key section available to every chunk, even when it is at the end of the source.
+      const keyMatch = examText.match(/(?:answer\s*key|answers?\s*key|model\s*answers?|الإجابات\s*النموذجية|مفتاح\s*الإجابة|الإجابات)[:\s\-\n]*[\s\S]{0,12000}$/i);
+      const answerKey = keyMatch ? keyMatch[0] : "غير محدد بوضوح في النص المستخرج.";
       const chunks = splitExamIntoChunks(examText);
-      const basePrompt = `${instruction}\n\nعدد الأسئلة المطلوب: ${questionCount}.\n\nالتزم بالنص المرفوع فقط. لا تخترع سؤالًا أو معلومة غير مدعومة بالمصدر. لو الإجابة غير واضحة اذكر ذلك صراحة. نظّم الناتج بعناوين واضحة، ورقّم الأسئلة، واكتب الاختيارات، ثم الإجابة الصحيحة، وشرح سبب صحتها وسبب خطأ باقي الاختيارات، وHigh-yield note عند توافرها.`;
-      let combinedOutput = "";
-      for (let index = 0; index < chunks.length; index++) {
-        setStatus(`نَبْراس بيحلّل الجزء ${index + 1} من ${chunks.length}...`);
-        const prompt = `${basePrompt}\n\nمهم: هذا الجزء ${index + 1} من ${chunks.length} من نفس الامتحان. حلّل الأسئلة الموجودة في هذا الجزء فقط، وحافظ على أرقامها الأصلية إن وُجدت. لا تفترض أن بقية أجزاء الامتحان موجودة هنا.`;
-        const response = await fetch(API_URL, {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ mode: "exam_studio", question: prompt, examText: chunks[index] }),
-        });
-        const separator = combinedOutput ? `\n\n━━━━━━━━━━━━━━━━━━━━\nالجزء ${index + 1} من ${chunks.length}\n━━━━━━━━━━━━━━━━━━━━\n\n` : "";
-        combinedOutput = await parseStream(response, combinedOutput + separator);
+      let extracted = [];
+      for (let i = 0; i < chunks.length; i++) {
+        setStatus(`استخراج وتصنيف الجزء ${i + 1} من ${chunks.length}...`);
+        const prompt = `مهمتك استخراج الأسئلة الموجودة في الجزء المرفق فقط، وتصنيفها حصريًا على قائمة الموضوعات المحددة.
+الموضوعات المسموح بها (استخدم الاسم حرفيًا):\n${topics.map((t,i)=>`${i+1}. ${t}`).join("\n")}
+قواعد إلزامية:
+- استخرج كل سؤال كاملًا مع كل الاختيارات المتاحة. لا تتجاهل أي سؤال.
+- لا تضع أي رقم أصلي من الملف في الناتج، ولا تحفظه في أي حقل. الترقيم سيُنشأ لاحقًا داخل كل Chapter.
+- لا تكرر السؤال. اختر Topic واحدًا فقط لكل سؤال. إذا تعذر التصنيف استخدم "Unclassified".
+- لا تخترع إجابة. استخدم مفتاح الإجابات المرفق إذا كان واضحًا، وإلا اجعل correctAnswer فارغًا وanswerStatus="not_found".
+- أعد JSON فقط دون Markdown أو شرح خارجه، بالشكل التالي:
+{"questions":[{"topic":"اسم الموضوع أو Unclassified","stem":"نص السؤال","options":["..."],"correctAnswer":"نص الاختيار الصحيح أو فارغ","answerStatus":"key|uncertain|not_found","explanation":"شرح عربي مختصر","optionExplanations":[{"option":"...","explanation":"..."}],"clinicalPearl":"","examTip":""}]}
+- لا تضف حقولًا أخرى. احتفظ بصياغة السؤال والاختيارات كما في المصدر. اشرح الاختيارات فقط إذا كان ذلك مدعومًا أو واضحًا علميًا، وميّز عدم اليقين.
+هذا الجزء ${i+1} من ${chunks.length}.
+مفتاح الإجابات المستخرج من نهاية الملف (قد لا يكون موجودًا):\n${answerKey}
+`;
+        const response = await fetch(API_URL, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ mode: "exam_studio", question: prompt, examText: chunks[i] }) });
+        if (!response.ok) { let msg = "فشل تحليل جزء من الملف."; try { msg = (await response.json()).error || msg; } catch {} throw new Error(msg); }
+        if (!response.body) throw new Error("السيرفر لم يرجع نتيجة.");
+        const reader = response.body.getReader(); const decoder = new TextDecoder(); let buffer = "", output = "";
+        while (true) {
+          const { value, done } = await reader.read(); if (done) break;
+          buffer += decoder.decode(value, { stream: true }); const frames = buffer.split(/\r?\n\r?\n/); buffer = frames.pop() || "";
+          for (const frame of frames) { const data = frame.split(/\r?\n/).filter(x => x.startsWith("data:")).map(x => x.slice(5).trim()).join("\n"); if (!data || data === "[DONE]") continue; const parsed = JSON.parse(data); if (parsed.error) throw new Error(parsed.error); if (parsed.text) output += parsed.text; }
+        }
+        if (buffer.trim()) { const data = buffer.split(/\r?\n/).filter(x=>x.startsWith("data:")).map(x=>x.slice(5).trim()).join("\n"); if (data && data !== "[DONE]") { const parsed=JSON.parse(data); if(parsed.text) output+=parsed.text; if(parsed.error) throw new Error(parsed.error); } }
+        extracted = extracted.concat(parseJsonQuestions(output));
       }
-      setStatus(`اكتمل تحليل الامتحان بالكامل (${chunks.length} جزء). تقدر تراجع النتيجة أو تصدّرها.`);
-    } catch (e) {
-      setError(e.message || "حصل خطأ غير متوقع."); setStatus("");
-    } finally { setBusy(false); }
+      // Keep only allowed topics; any unexpected topic is explicitly unclassified.
+      const normalized = extracted.map(q => ({
+        topic: topics.includes(String(q.topic || "").trim()) ? String(q.topic).trim() : "Unclassified",
+        stem: String(q.stem || "").trim().replace(/^\s*(?:Q(?:uestion)?\s*)?\d{1,4}\s*[\).:\-]\s*/i, ""), options: Array.isArray(q.options) ? q.options.map(String) : [],
+        correctAnswer: String(q.correctAnswer || ""), answerStatus: ["key","uncertain","not_found"].includes(q.answerStatus) ? q.answerStatus : "uncertain",
+        explanation: String(q.explanation || ""), optionExplanations: Array.isArray(q.optionExplanations) ? q.optionExplanations : [],
+        clinicalPearl: String(q.clinicalPearl || ""), examTip: String(q.examTip || "")
+      })).filter(q => q.stem);
+      // Renumber from 1 independently inside each topic. Original source numbers are discarded.
+      const counters = {};
+      const numbered = normalized.map(q => { counters[q.topic] = (counters[q.topic] || 0) + 1; return { ...q, displayNumber: counters[q.topic] }; });
+      setQuestions(numbered);
+      const unclassified = numbered.filter(q => q.topic === "Unclassified").length;
+      setStatus(`اكتمل التحليل: ${numbered.length} سؤال. غير مصنف: ${unclassified}. تمت إعادة الترقيم من 1 داخل كل Chapter.`);
+    } catch (e) { setError(e.message || "حدث خطأ أثناء التحليل."); setStatus(""); }
+    finally { setBusy(false); }
   };
-
+  const moveQuestion = (index, topic) => {
+    setQuestions(prev => {
+      const copy = prev.map(q => ({ ...q })); copy[index].topic = topic;
+      const counters = {}; return copy.map(q => { counters[q.topic] = (counters[q.topic] || 0) + 1; return { ...q, displayNumber: counters[q.topic] }; });
+    });
+  };
+  const chapterNames = [...topics, ...(questions.some(q => q.topic === "Unclassified") ? ["Unclassified"] : [])];
+  const chapterCounts = chapterNames.map(topic => ({ topic, count: questions.filter(q => q.topic === topic).length }));
+  const startQuiz = topic => {
+    const chosen = topic === "All" ? questions : questions.filter(q => q.topic === topic);
+    setQuizQuestions(chosen); setQuizIndex(0); setQuizAnswers({}); setShowQuizResult(false);
+  };
   const exportWord = () => {
-    if (!result.trim()) return;
-    const safe = result.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/\n/g, "<br>");
-    const html = `<!doctype html><html><head><meta charset="utf-8"><style>body{font-family:Arial,sans-serif;direction:rtl;line-height:1.8;color:#172b4d;padding:36px}header{text-align:center;border-bottom:3px solid #0D9488;padding-bottom:18px;margin-bottom:28px}.brand{font-size:28px;font-weight:700;color:#0D9488}.en{font-size:13px;letter-spacing:4px;color:#64748b}main{white-space:normal;font-size:14px}</style></head><body><header><div class="brand">نَبْراس</div><div class="en">NEBRAS · EXAM STUDIO</div><p>مراجعة وحل الامتحانات</p></header><main>${safe}</main></body></html>`;
-    const blob = new Blob(["\ufeff", html], { type: "application/msword" });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement("a"); a.href = url; a.download = "NEBRAS-Exam-Review.doc"; a.click();
-    URL.revokeObjectURL(url);
+    if (!questions.length) return;
+    const content = questions.map(q => `Chapter: ${q.topic}\nQuestion ${q.displayNumber}: ${q.stem}\n${q.options.map((o,i)=>`${String.fromCharCode(65+i)}. ${o}`).join("\n")}\nCorrect answer: ${q.correctAnswer || "Not available in source"}\nExplanation: ${q.explanation}\nClinical Pearl: ${q.clinicalPearl}\nExam Tip: ${q.examTip}`).join("\n\n--------------------\n\n");
+    const safe = content.replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;").replace(/\n/g,"<br>");
+    const html = `<!doctype html><html><head><meta charset="utf-8"><style>body{font-family:Arial,sans-serif;direction:ltr;line-height:1.8;color:#172b4d;padding:36px}header{text-align:center;border-bottom:3px solid #0D9488;padding-bottom:18px;margin-bottom:28px}.brand{font-size:28px;font-weight:700;color:#0D9488}</style></head><body><header><div class="brand">نَبْراس · NEBRAS EXAM STUDIO</div></header>${safe}</body></html>`;
+    const url = URL.createObjectURL(new Blob(["\ufeff", html], {type:"application/msword"})); const a=document.createElement("a"); a.href=url; a.download="NEBRAS-Exam-Studio.doc"; a.click(); URL.revokeObjectURL(url);
   };
-
   const exportPdf = () => {
-    if (!result.trim()) return;
-    const safe = result.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/\n/g, "<br>");
-    const win = window.open("", "_blank");
-    if (!win) { setError("اسمح بفتح النوافذ المنبثقة عشان تقدر تحفظ PDF."); return; }
-    win.document.write(`<!doctype html><html dir="rtl"><head><meta charset="utf-8"><title>NEBRAS Exam Studio</title><style>body{font-family:Arial,sans-serif;direction:rtl;line-height:1.9;color:#172b4d;padding:30px}header{text-align:center;border-bottom:3px solid #0D9488;padding-bottom:16px;margin-bottom:24px}.brand{font-size:28px;font-weight:bold;color:#0D9488}.en{font-size:13px;letter-spacing:4px;color:#64748b}main{font-size:14px}@media print{body{padding:12mm}}</style></head><body><header><div class="brand">نَبْراس</div><div class="en">NEBRAS · EXAM STUDIO</div><p>مراجعة وحل الامتحانات</p></header><main>${safe}</main><script>window.onload=()=>window.print();</script></body></html>`);
-    win.document.close();
+    if (!questions.length) return;
+    const text = questions.map(q => `Chapter: ${q.topic}\nQuestion ${q.displayNumber}: ${q.stem}\n${q.options.map((o,i)=>`${String.fromCharCode(65+i)}. ${o}`).join("\n")}\nCorrect answer: ${q.correctAnswer || "Not available"}\nExplanation: ${q.explanation}\nClinical Pearl: ${q.clinicalPearl}\nExam Tip: ${q.examTip}`).join("\n\n--------------------\n\n");
+    const safe=text.replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;").replace(/\n/g,"<br>"); const win=window.open("","_blank");
+    if(!win){setError("اسمح بفتح النوافذ المنبثقة لحفظ PDF.");return;}
+    win.document.write(`<!doctype html><html><head><meta charset="utf-8"><title>NEBRAS Exam Studio</title><style>body{font-family:Arial,sans-serif;line-height:1.9;color:#172b4d;padding:30px}@media print{body{padding:12mm}}</style></head><body><h1>نَبْراس · NEBRAS EXAM STUDIO</h1>${safe}<script>window.onload=()=>window.print();</script></body></html>`); win.document.close();
   };
-
   const buttonStyle = { border: 0, borderRadius: 12, padding: "12px 16px", background: palette.accent, color: "white", fontWeight: 700, cursor: "pointer", display: "inline-flex", alignItems: "center", gap: 8 };
   const fieldStyle = { width: "100%", boxSizing: "border-box", border: `1px solid ${palette.border}`, borderRadius: 12, padding: 13, background: palette.card, color: palette.text, font: "inherit", outlineColor: palette.accent };
-
+  const quizQuestion = quizQuestions?.[quizIndex];
   return (
-    <div dir="rtl" style={{ minHeight: "100vh", background: palette.page, color: palette.text, padding: "22px 16px 48px" }}>
-      <div style={{ maxWidth: 1050, margin: "0 auto" }}>
-        <button type="button" onClick={onBack} style={{ ...buttonStyle, background: palette.soft, color: palette.text, marginBottom: 18 }}><ChevronLeft size={18}/> رجوع للرئيسية</button>
-        <section style={{ background: `linear-gradient(135deg, ${dark ? "#123b42" : "#e0f2f1"}, ${palette.card})`, border: `1px solid ${palette.border}`, borderRadius: 22, padding: "24px", marginBottom: 18 }}>
-          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 16, flexWrap: "wrap" }}>
-            <div><div style={{ color: palette.accent, fontSize: 13, fontWeight: 800, letterSpacing: 2 }}>NEBRAS · EXAM STUDIO</div><h1 style={{ margin: "8px 0", fontSize: 30 }}>نَبْراس</h1><p style={{ margin: 0, color: palette.muted }}>ارفع امتحانك، استخرج الأسئلة، افهم الإجابات وصدّر مراجعتك.</p></div>
-            <div style={{ width: 76, height: 76, borderRadius: 22, background: palette.accent, color: "white", display: "grid", placeItems: "center" }}><GraduationCap size={42}/></div>
-          </div>
+    <div dir="rtl" style={{ minHeight:"100vh", background:palette.page, color:palette.text, padding:"22px 16px 48px" }}>
+      <div style={{maxWidth:1050,margin:"0 auto"}}>
+        <button type="button" onClick={onBack} style={{...buttonStyle,background:palette.soft,color:palette.text,marginBottom:18}}><ChevronLeft size={18}/> رجوع للرئيسية</button>
+        <section style={{background:`linear-gradient(135deg,${dark?"#123b42":"#e0f2f1"},${palette.card})`,border:`1px solid ${palette.border}`,borderRadius:22,padding:24,marginBottom:18}}>
+          <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",gap:16,flexWrap:"wrap"}}><div><div style={{color:palette.accent,fontSize:13,fontWeight:800,letterSpacing:2}}>NEBRAS · EXAM STUDIO</div><h1 style={{margin:"8px 0",fontSize:30}}>نَبْراس</h1><p style={{margin:0,color:palette.muted}}>حدد موضوعاتك، ارفع الامتحان، ودع النظام يصنّف الأسئلة ويجهز امتحانات الفصول.</p></div><div style={{width:76,height:76,borderRadius:22,background:palette.accent,color:"white",display:"grid",placeItems:"center"}}><GraduationCap size={42}/></div></div>
         </section>
-        <section style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit,minmax(280px,1fr))", gap: 16 }}>
-          <div style={{ background: palette.card, border: `1px solid ${palette.border}`, borderRadius: 18, padding: 20 }}>
-            <h2 style={{ marginTop: 0, fontSize: 19 }}><Upload size={19} style={{ verticalAlign: "middle", marginLeft: 7 }}/> ملف الامتحان</h2>
-            <label style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 10, padding: 24, border: `2px dashed ${palette.accent}`, borderRadius: 14, cursor: "pointer", background: palette.soft, textAlign: "center" }}>
-              <FileText size={34} color={palette.accent}/><strong>اضغط لاختيار ملف</strong><span style={{ color: palette.muted, fontSize: 12 }}>PDF · DOCX · TXT · MD · CSV (حتى 12 MB) · تقسيم تلقائي للملفات الكبيرة</span>
-              <input type="file" accept=".pdf,.docx,.txt,.md,.csv" onChange={handleFile} style={{ display: "none" }}/>
-            </label>
-            {fileName && <p style={{ color: palette.accent, fontSize: 13, marginBottom: 8 }}>الملف: {fileName}</p>}
-            <label style={{ display: "block", margin: "16px 0 8px", fontWeight: 700 }}>أو الصق نص الامتحان هنا</label>
-            <textarea value={examText} onChange={e => { setExamText(e.target.value); setFileName(""); }} rows={9} placeholder="الصق الأسئلة أو محتوى الامتحان هنا..." style={{ ...fieldStyle, resize: "vertical", lineHeight: 1.7 }}/>
-            <div style={{ display: "flex", justifyContent: "space-between", color: palette.muted, fontSize: 12, marginTop: 7 }}><span>{examText.length.toLocaleString()} حرف</span><button type="button" onClick={() => { setExamText(""); setFileName(""); setResult(""); setError(""); setStatus(""); }} style={{ border: 0, background: "transparent", color: palette.muted, cursor: "pointer" }}><Trash2 size={14} style={{ verticalAlign: "middle" }}/> مسح</button></div>
-          </div>
-          <div style={{ background: palette.card, border: `1px solid ${palette.border}`, borderRadius: 18, padding: 20 }}>
-            <h2 style={{ marginTop: 0, fontSize: 19 }}><Sparkles size={19} style={{ verticalAlign: "middle", marginLeft: 7 }}/> إعداد التحليل</h2>
-            <label style={{ display: "block", marginBottom: 8, fontWeight: 700 }}>عدد الأسئلة</label>
-            <select value={questionCount} onChange={e => setQuestionCount(e.target.value)} style={{ ...fieldStyle, marginBottom: 16 }}><option>كل الأسئلة الموجودة</option><option>10 أسئلة</option><option>20 سؤال</option><option>30 سؤال</option></select>
-            <label style={{ display: "block", marginBottom: 8, fontWeight: 700 }}>عايز نَبْراس يعمل إيه؟</label>
-            <textarea value={instruction} onChange={e => setInstruction(e.target.value)} rows={6} style={{ ...fieldStyle, resize: "vertical", lineHeight: 1.7 }}/>
-            <button type="button" disabled={busy || !examText.trim()} onClick={generateExam} style={{ ...buttonStyle, width: "100%", justifyContent: "center", marginTop: 16, opacity: busy || !examText.trim() ? .6 : 1 }}>
-              {busy ? <Loader2 size={18} className="exam-studio-spin"/> : <Sparkles size={18}/>} {busy ? "جاري التحليل..." : "ابدأ حل وتحليل الامتحان"}
-            </button>
-            <p style={{ color: palette.muted, fontSize: 12, lineHeight: 1.7 }}>الملفات تُقرأ داخل المتصفح، ثم يُرسل النص المستخرج إلى خدمة الذكاء الاصطناعي لتحليله. ملفات PDF المصوّرة تحتاج OCR قبل رفعها.</p>
-          </div>
-        </section>
-        {(status || error) && <div role="status" style={{ marginTop: 16, padding: 13, borderRadius: 12, background: error ? (dark ? "#451f28" : "#fff1f2") : palette.soft, color: error ? (dark ? "#fecdd3" : "#be123c") : palette.text }}>{error || status}</div>}
-        {result && <section style={{ marginTop: 18, background: palette.card, border: `1px solid ${palette.border}`, borderRadius: 18, padding: 20 }}>
-          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: 10 }}><div><div style={{ color: palette.accent, fontWeight: 800, letterSpacing: 1 }}>نَبْراس · NEBRAS</div><h2 style={{ margin: "5px 0 14px", fontSize: 21 }}>نتيجة تحليل الامتحان</h2></div><div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}><button type="button" onClick={exportWord} style={buttonStyle}><FileDown size={16}/> Word</button><button type="button" onClick={exportPdf} style={buttonStyle}><Printer size={16}/> حفظ PDF</button></div></div>
-          <div style={{ whiteSpace: "pre-wrap", lineHeight: 1.9, overflowWrap: "anywhere", borderTop: `1px solid ${palette.border}`, paddingTop: 16 }}>{result}</div>
+        {!quizQuestions && <>
+          <section style={{display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(280px,1fr))",gap:16}}>
+            <div style={{background:palette.card,border:`1px solid ${palette.border}`,borderRadius:18,padding:20}}>
+              <h2 style={{marginTop:0,fontSize:19}}><Upload size={19} style={{verticalAlign:"middle",marginLeft:7}}/> ملف الامتحان</h2>
+              <label style={{display:"flex",flexDirection:"column",alignItems:"center",gap:10,padding:24,border:`2px dashed ${palette.accent}`,borderRadius:14,cursor:"pointer",background:palette.soft,textAlign:"center"}}><FileText size={34} color={palette.accent}/><strong>اضغط لاختيار ملف</strong><span style={{color:palette.muted,fontSize:12}}>PDF · DOCX · TXT · MD · CSV (حتى 12 MB)</span><input type="file" accept=".pdf,.docx,.txt,.md,.csv" onChange={handleFile} style={{display:"none"}}/></label>
+              {fileName && <p style={{color:palette.accent,fontSize:13}}>الملف: {fileName}</p>}
+              <label style={{display:"block",margin:"16px 0 8px",fontWeight:700}}>أو الصق نص الامتحان</label><textarea value={examText} onChange={e=>{setExamText(e.target.value);setFileName("");}} rows={9} placeholder="الصق الأسئلة ومفتاح الإجابات هنا..." style={{...fieldStyle,resize:"vertical",lineHeight:1.7}}/>
+              <div style={{display:"flex",justifyContent:"space-between",color:palette.muted,fontSize:12,marginTop:7}}><span>{examText.length.toLocaleString()} حرف</span><button type="button" onClick={()=>{setExamText("");setFileName("");setQuestions([]);setError("");setStatus("");}} style={{border:0,background:"transparent",color:palette.muted,cursor:"pointer"}}><Trash2 size={14} style={{verticalAlign:"middle"}}/> مسح</button></div>
+            </div>
+            <div style={{background:palette.card,border:`1px solid ${palette.border}`,borderRadius:18,padding:20}}>
+              <h2 style={{marginTop:0,fontSize:19}}><ClipboardList size={19} style={{verticalAlign:"middle",marginLeft:7}}/> الموضوعات / Chapters</h2>
+              <p style={{color:palette.muted,fontSize:13,lineHeight:1.7}}>اكتب كل موضوع في سطر منفصل. سيتم حفظ قائمتك تلقائيًا لاستخدامها مع الملفات القادمة.</p>
+              <textarea value={topicsText} onChange={e=>setTopicsText(e.target.value)} rows={9} style={{...fieldStyle,resize:"vertical",lineHeight:1.8}}/>
+              <button type="button" onClick={()=>{try{localStorage.setItem(TOPICS_KEY,topics.join("\n"));setStatus("تم حفظ قائمة الموضوعات على هذا الجهاز.");}catch{setError("تعذر حفظ الموضوعات في المتصفح.");}}} style={{...buttonStyle,marginTop:10,background:palette.soft,color:palette.text}}>حفظ الموضوعات</button>
+              <button type="button" disabled={busy||!examText.trim()||!topics.length} onClick={generateExam} style={{...buttonStyle,width:"100%",justifyContent:"center",marginTop:12,opacity:busy||!examText.trim()||!topics.length ? .6 : 1}}>{busy?<Loader2 size={18} className="exam-studio-spin"/>:<Sparkles size={18}/>} {busy?"جاري التصنيف...":"استخرج وصنّف كل الأسئلة"}</button>
+            </div>
+          </section>
+          {(status||error)&&<div role="status" style={{marginTop:16,padding:13,borderRadius:12,background:error?(dark?"#451f28":"#fff1f2"):palette.soft,color:error?(dark?"#fecdd3":"#be123c"):palette.text}}>{error||status}</div>}
+          {questions.length>0&&<section style={{marginTop:18,background:palette.card,border:`1px solid ${palette.border}`,borderRadius:18,padding:20}}>
+            <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",gap:10,flexWrap:"wrap"}}><div><h2 style={{margin:"0 0 6px"}}>نتيجة التصنيف</h2><p style={{margin:0,color:palette.muted}}>إجمالي الأسئلة: {questions.length} · غير مصنف: {questions.filter(q=>q.topic==="Unclassified").length}</p></div><div style={{display:"flex",gap:8,flexWrap:"wrap"}}><button type="button" onClick={()=>startQuiz("All")} style={buttonStyle}>امتحان شامل</button><button type="button" onClick={exportWord} style={buttonStyle}><FileDown size={16}/> Word</button><button type="button" onClick={exportPdf} style={buttonStyle}><Printer size={16}/> PDF</button></div></div>
+            <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(180px,1fr))",gap:10,marginTop:16}}>{chapterCounts.map(c=><div key={c.topic} style={{padding:13,border:`1px solid ${palette.border}`,borderRadius:12,background:palette.soft}}><strong>{c.topic}</strong><div style={{color:palette.accent,fontWeight:800,marginTop:5}}>{c.count} سؤال</div><button type="button" disabled={!c.count} onClick={()=>startQuiz(c.topic)} style={{...buttonStyle,marginTop:9,padding:"8px 11px",opacity:c.count?1:.45}}>امتحان الفصل</button></div>)}</div>
+            <label style={{display:"block",marginTop:20,marginBottom:8,fontWeight:700}}>عرض أسئلة الفصل</label><select value={selectedChapter} onChange={e=>setSelectedChapter(e.target.value)} style={fieldStyle}><option value="All">كل الفصول</option>{chapterNames.map(t=><option key={t}>{t}</option>)}</select>
+            {(selectedChapter==="All"?questions:questions.filter(q=>q.topic===selectedChapter)).map(q=>{const index=questions.indexOf(q);return <article key={index} style={{marginTop:14,padding:16,border:`1px solid ${palette.border}`,borderRadius:14}}><div style={{display:"flex",justifyContent:"space-between",gap:10,alignItems:"center",flexWrap:"wrap"}}><strong>{q.topic} · Question {q.displayNumber}</strong><select value={q.topic} onChange={e=>moveQuestion(index,e.target.value)} style={{...fieldStyle,width:"auto",minWidth:170}}>{chapterNames.filter(t=>t!=="Unclassified").map(t=><option key={t}>{t}</option>)}<option value="Unclassified">Unclassified</option></select></div><p style={{lineHeight:1.8}}>{q.stem}</p><ol type="A">{q.options.map((o,i)=><li key={i} style={{marginBottom:5}}>{o}</li>)}</ol><p><strong>الإجابة:</strong> {q.correctAnswer||"غير موجودة بوضوح في مفتاح الإجابات"} <span style={{color:palette.muted,fontSize:12}}>({q.answerStatus})</span></p><p style={{lineHeight:1.8}}>{q.explanation}</p>{q.clinicalPearl&&<p><strong>Clinical Pearl:</strong> {q.clinicalPearl}</p>}{q.examTip&&<p><strong>Exam Tip:</strong> {q.examTip}</p>}</article>})}
+          </section>}
+        </>}
+        {quizQuestions&&<section style={{marginTop:18,background:palette.card,border:`1px solid ${palette.border}`,borderRadius:18,padding:22}}>
+          <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",gap:10,flexWrap:"wrap"}}><h2 style={{margin:0}}>{quizQuestions.length?`امتحان ${quizQuestions[0].topic===quizQuestions.at(-1).topic?quizQuestions[0].topic:"شامل"}`:"لا توجد أسئلة"}</h2><button type="button" onClick={()=>setQuizQuestions(null)} style={{...buttonStyle,background:palette.soft,color:palette.text}}>إنهاء الامتحان</button></div>
+          {quizQuestions.length>0&&quizQuestion&&<><p style={{color:palette.muted}}>Question {quizIndex+1} / {quizQuestions.length}</p><h3 style={{lineHeight:1.8}}>{quizQuestion.stem}</h3>{quizQuestion.options.map((o,i)=><label key={i} style={{display:"flex",gap:10,alignItems:"center",padding:12,marginTop:8,border:`1px solid ${palette.border}`,borderRadius:12,cursor:"pointer"}}><input type="radio" name={`quiz-${quizIndex}`} checked={quizAnswers[quizIndex]===o} onChange={()=>setQuizAnswers(p=>({...p,[quizIndex]:o}))}/>{o}</label>)}<div style={{display:"flex",gap:8,marginTop:18,flexWrap:"wrap"}}><button type="button" disabled={quizIndex===0} onClick={()=>setQuizIndex(i=>i-1)} style={{...buttonStyle,opacity:quizIndex === 0 ? .5 : 1}}>السابق</button><button type="button" disabled={quizIndex===quizQuestions.length-1} onClick={()=>setQuizIndex(i=>i+1)} style={{...buttonStyle,opacity:quizIndex === quizQuestions.length - 1 ? .5 : 1}}>التالي</button><button type="button" onClick={()=>setShowQuizResult(true)} style={{...buttonStyle,background:"#2563eb"}}>إنهاء وعرض النتيجة</button></div>{showQuizResult&&<div style={{marginTop:18,padding:16,borderRadius:12,background:palette.soft}}><h3>نتيجتك: {quizQuestions.filter((q,i)=>quizAnswers[i]&&quizAnswers[i]===q.correctAnswer).length} / {quizQuestions.length}</h3>{quizQuestions.map((q,i)=><p key={i}>Question {i+1}: {quizAnswers[i]===q.correctAnswer?"✓ صحيح":"✗ خطأ أو بدون إجابة"} — {q.correctAnswer||"الإجابة غير متاحة"}</p>)}</div>}</>}
         </section>}
-      </div>
-      <style>{`@keyframes examStudioSpin{to{transform:rotate(360deg)}} .exam-studio-spin{animation:examStudioSpin 1s linear infinite}`}</style>
+      </div><style>{`@keyframes examStudioSpin{to{transform:rotate(360deg)}} .exam-studio-spin{animation:examStudioSpin 1s linear infinite}`}</style>
     </div>
   );
 }
-
 
 // ==========================================
 // MAIN APP
