@@ -1786,16 +1786,14 @@ function ClinicalCases({ darkMode, onBack }) {
 // ==========================================
 
 function ExamStudio({ darkMode, onBack }) {
-  const DEFAULT_TOPICS = [
-    "Growth & Development", "Immunization", "Nutrition", "Infections",
-    "Respiratory", "Cardiology", "Endocrinology & DKA", "Neurology"
-  ];
-  const TOPICS_KEY = "nebras-exam-studio-topics-v2";
+  const TOPICS_KEY = "nebras-exam-studio-topics-v3";
   const [fileName, setFileName] = useState("");
   const [examText, setExamText] = useState("");
+  const [subject, setSubject] = useState("");
+  const [classificationMode, setClassificationMode] = useState("auto");
   const [topicsText, setTopicsText] = useState(() => {
-    try { return localStorage.getItem(TOPICS_KEY) || DEFAULT_TOPICS.join("\n"); }
-    catch { return DEFAULT_TOPICS.join("\n"); }
+    try { return localStorage.getItem(TOPICS_KEY) || ""; }
+    catch { return ""; }
   });
   const [questions, setQuestions] = useState([]);
   const [busy, setBusy] = useState(false);
@@ -1813,6 +1811,7 @@ function ExamStudio({ darkMode, onBack }) {
     border: dark ? "#29364a" : "#e5eaf0", soft: dark ? "#1e293b" : "#f1f5f9", accent: "#0D9488"
   };
   const topics = [...new Set(topicsText.split(/\r?\n|,/).map(x => x.trim()).filter(Boolean))];
+  const isAutoClassification = classificationMode === "auto";
   const loadScript = (src, test) => new Promise((resolve, reject) => {
     if (test()) return resolve();
     const existing = document.querySelector(`script[data-nebras-src="${src}"]`);
@@ -1864,10 +1863,10 @@ function ExamStudio({ darkMode, onBack }) {
   };
   const generateExam = async () => {
     if (!examText.trim()) { setError("ارفع ملف الامتحان أو الصق النص أولًا."); return; }
-    if (!topics.length) { setError("اكتب أسماء الموضوعات، كل موضوع في سطر منفصل."); return; }
+    if (!isAutoClassification && !topics.length) { setError("اكتب أسماء الـChapters، كل Chapter في سطر منفصل، أو اختر التصنيف التلقائي."); return; }
     setBusy(true); setError(""); setStatus("بدء استخراج وتصنيف الأسئلة..."); setQuestions([]); setQuizQuestions(null);
     try {
-      try { localStorage.setItem(TOPICS_KEY, topics.join("\n")); } catch {}
+      if (!isAutoClassification) { try { localStorage.setItem(TOPICS_KEY, topics.join("\n")); } catch {} }
       // Keep the answer-key section available to every chunk, even when it is at the end of the source.
       const keyMatch = examText.match(/(?:answer\s*key|answers?\s*key|model\s*answers?|الإجابات\s*النموذجية|مفتاح\s*الإجابة|الإجابات)[:\s\-\n]*[\s\S]{0,12000}$/i);
       const answerKey = keyMatch ? keyMatch[0] : "غير محدد بوضوح في النص المستخرج.";
@@ -1875,8 +1874,12 @@ function ExamStudio({ darkMode, onBack }) {
       let extracted = [];
       for (let i = 0; i < chunks.length; i++) {
         setStatus(`استخراج وتصنيف الجزء ${i + 1} من ${chunks.length}...`);
-        const prompt = `مهمتك استخراج الأسئلة الموجودة في الجزء المرفق فقط، وتصنيفها حصريًا على قائمة الموضوعات المحددة.
-الموضوعات المسموح بها (استخدم الاسم حرفيًا):\n${topics.map((t,i)=>`${i+1}. ${t}`).join("\n")}
+        const prompt = `مهمتك استخراج الأسئلة الموجودة في الجزء المرفق فقط، وتصنيف كل سؤال حسب المادة والـChapter.
+المادة/التخصص الذي حدده المستخدم: ${subject.trim() || "غير محدد؛ استنتج المادة من محتوى الملف دون افتراض غير مدعوم."}
+وضع التصنيف: ${isAutoClassification ? "تلقائي" : "يدوي حسب القائمة"}
+${isAutoClassification
+  ? "استنتج أسماء Chapters طبية واضحة ومتسقة من محتوى الملف. استخدم أسماء Chapters قصيرة باللغة الإنجليزية الطبية. إذا لم تستطع تحديد Chapter بثقة، استخدم Unclassified. لا تستخدم اسم المادة كـChapter إلا إذا كان السؤال عامًا فعلًا."
+  : `الموضوعات المسموح بها (استخدم الاسم حرفيًا ولا تنشئ غيرها):\n${topics.map((t,i)=>`${i+1}. ${t}`).join("\n")}`}
 قواعد إلزامية:
 - استخرج كل سؤال كاملًا مع كل الاختيارات المتاحة. لا تتجاهل أي سؤال.
 - لا تضع أي رقم أصلي من الملف في الناتج، ولا تحفظه في أي حقل. الترقيم سيُنشأ لاحقًا داخل كل Chapter.
@@ -1888,7 +1891,7 @@ function ExamStudio({ darkMode, onBack }) {
 هذا الجزء ${i+1} من ${chunks.length}.
 مفتاح الإجابات المستخرج من نهاية الملف (قد لا يكون موجودًا):\n${answerKey}
 `;
-        const response = await fetch(API_URL, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ mode: "exam_studio", question: prompt, examText: chunks[i] }) });
+        const response = await fetch(API_URL, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ mode: "exam_studio", question: prompt, examText: chunks[i], subject, classificationMode, allowedTopics: isAutoClassification ? [] : topics }) });
         if (!response.ok) { let msg = "فشل تحليل جزء من الملف."; try { msg = (await response.json()).error || msg; } catch {} throw new Error(msg); }
         if (!response.body) throw new Error("السيرفر لم يرجع نتيجة.");
         const reader = response.body.getReader(); const decoder = new TextDecoder(); let buffer = "", output = "";
@@ -1901,19 +1904,35 @@ function ExamStudio({ darkMode, onBack }) {
         extracted = extracted.concat(parseJsonQuestions(output));
       }
       // Keep only allowed topics; any unexpected topic is explicitly unclassified.
-      const normalized = extracted.map(q => ({
-        topic: topics.includes(String(q.topic || "").trim()) ? String(q.topic).trim() : "Unclassified",
-        stem: String(q.stem || "").trim().replace(/^\s*(?:Q(?:uestion)?\s*)?\d{1,4}\s*[\).:\-]\s*/i, ""), options: Array.isArray(q.options) ? q.options.map(String) : [],
-        correctAnswer: String(q.correctAnswer || ""), answerStatus: ["key","uncertain","not_found"].includes(q.answerStatus) ? q.answerStatus : "uncertain",
-        explanation: String(q.explanation || ""), optionExplanations: Array.isArray(q.optionExplanations) ? q.optionExplanations : [],
-        clinicalPearl: String(q.clinicalPearl || ""), examTip: String(q.examTip || "")
-      })).filter(q => q.stem);
-      // Renumber from 1 independently inside each topic. Original source numbers are discarded.
+      const normalized = extracted.map(q => {
+        const proposedTopic = String(q.topic || "").trim();
+        return {
+          topic: isAutoClassification
+            ? (proposedTopic && proposedTopic !== "Unclassified" ? proposedTopic : "Unclassified")
+            : (topics.includes(proposedTopic) ? proposedTopic : "Unclassified"),
+          stem: String(q.stem || "").trim().replace(/^\s*(?:Q(?:uestion)?\s*)?\d{1,4}\s*[\).:\-]\s*/i, ""),
+          options: Array.isArray(q.options) ? q.options.map(String) : [],
+          correctAnswer: String(q.correctAnswer || ""),
+          answerStatus: ["key","uncertain","not_found"].includes(q.answerStatus) ? q.answerStatus : "uncertain",
+          explanation: String(q.explanation || ""),
+          optionExplanations: Array.isArray(q.optionExplanations) ? q.optionExplanations : [],
+          clinicalPearl: String(q.clinicalPearl || ""), examTip: String(q.examTip || "")
+        };
+      }).filter(q => q.stem);
+      // Remove duplicate questions across chunks using normalized stem + choices.
+      const seenQuestions = new Set();
+      const uniqueQuestions = normalized.filter(q => {
+        const fingerprint = `${q.stem} ${q.options.join(" ")}`.toLowerCase().replace(/[^\p{L}\p{N}]+/gu, " ").trim();
+        if (!fingerprint || seenQuestions.has(fingerprint)) return false;
+        seenQuestions.add(fingerprint);
+        return true;
+      });
+      // Renumber from 1 independently inside each chapter. Original source numbers are discarded.
       const counters = {};
-      const numbered = normalized.map(q => { counters[q.topic] = (counters[q.topic] || 0) + 1; return { ...q, displayNumber: counters[q.topic] }; });
+      const numbered = uniqueQuestions.map(q => { counters[q.topic] = (counters[q.topic] || 0) + 1; return { ...q, displayNumber: counters[q.topic] }; });
       setQuestions(numbered);
       const unclassified = numbered.filter(q => q.topic === "Unclassified").length;
-      setStatus(`اكتمل التحليل: ${numbered.length} سؤال. غير مصنف: ${unclassified}. تمت إعادة الترقيم من 1 داخل كل Chapter.`);
+      setStatus(`اكتمل التحليل: ${numbered.length} سؤال بعد إزالة التكرار. ${isAutoClassification ? "تم استنتاج الـChapters تلقائيًا." : "تم الالتزام بالـChapters التي حددتها."} غير مصنف: ${unclassified}. تمت إعادة الترقيم من 1 داخل كل Chapter.`);
     } catch (e) { setError(e.message || "حدث خطأ أثناء التحليل."); setStatus(""); }
     finally { setBusy(false); }
   };
@@ -1954,6 +1973,16 @@ function ExamStudio({ darkMode, onBack }) {
           <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",gap:16,flexWrap:"wrap"}}><div><div style={{color:palette.accent,fontSize:13,fontWeight:800,letterSpacing:2}}>NEBRAS · EXAM STUDIO</div><h1 style={{margin:"8px 0",fontSize:30}}>نَبْراس</h1><p style={{margin:0,color:palette.muted}}>حدد موضوعاتك، ارفع الامتحان، ودع النظام يصنّف الأسئلة ويجهز امتحانات الفصول.</p></div><div style={{width:76,height:76,borderRadius:22,background:palette.accent,color:"white",display:"grid",placeItems:"center"}}><GraduationCap size={42}/></div></div>
         </section>
         {!quizQuestions && <>
+          <section style={{background:palette.card,border:`1px solid ${palette.border}`,borderRadius:18,padding:18,marginBottom:16}}>
+            <label style={{display:"block",fontWeight:800,marginBottom:8}}>المادة / Subject (اختياري لكنه يساعد على دقة التصنيف)</label>
+            <input value={subject} onChange={e=>setSubject(e.target.value)} placeholder="مثال: Pediatrics, Internal Medicine, Surgery..." style={fieldStyle}/>
+            <label style={{display:"block",fontWeight:800,margin:"16px 0 8px"}}>طريقة تحديد الـChapter</label>
+            <select value={classificationMode} onChange={e=>setClassificationMode(e.target.value)} style={fieldStyle}>
+              <option value="auto">تلقائي — لو نسيت، النظام يصنّف الأسئلة طبيًا</option>
+              <option value="manual">يدوي — استخدم قائمة الـChapters التي أحددها</option>
+            </select>
+            <p style={{color:palette.muted,fontSize:12,lineHeight:1.7,marginBottom:0}}>لو اخترت التلقائي، سيستنتج النظام الفصول من محتوى الأسئلة. ولو اخترت اليدوي، سيحترم قائمتك حرفيًا.</p>
+          </section>
           <section style={{display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(280px,1fr))",gap:16}}>
             <div style={{background:palette.card,border:`1px solid ${palette.border}`,borderRadius:18,padding:20}}>
               <h2 style={{marginTop:0,fontSize:19}}><Upload size={19} style={{verticalAlign:"middle",marginLeft:7}}/> ملف الامتحان</h2>
@@ -1964,10 +1993,15 @@ function ExamStudio({ darkMode, onBack }) {
             </div>
             <div style={{background:palette.card,border:`1px solid ${palette.border}`,borderRadius:18,padding:20}}>
               <h2 style={{marginTop:0,fontSize:19}}><ClipboardList size={19} style={{verticalAlign:"middle",marginLeft:7}}/> الموضوعات / Chapters</h2>
-              <p style={{color:palette.muted,fontSize:13,lineHeight:1.7}}>اكتب كل موضوع في سطر منفصل. سيتم حفظ قائمتك تلقائيًا لاستخدامها مع الملفات القادمة.</p>
-              <textarea value={topicsText} onChange={e=>setTopicsText(e.target.value)} rows={9} style={{...fieldStyle,resize:"vertical",lineHeight:1.8}}/>
-              <button type="button" onClick={()=>{try{localStorage.setItem(TOPICS_KEY,topics.join("\n"));setStatus("تم حفظ قائمة الموضوعات على هذا الجهاز.");}catch{setError("تعذر حفظ الموضوعات في المتصفح.");}}} style={{...buttonStyle,marginTop:10,background:palette.soft,color:palette.text}}>حفظ الموضوعات</button>
-              <button type="button" disabled={busy||!examText.trim()||!topics.length} onClick={generateExam} style={{...buttonStyle,width:"100%",justifyContent:"center",marginTop:12,opacity:busy||!examText.trim()||!topics.length ? .6 : 1}}>{busy?<Loader2 size={18} className="exam-studio-spin"/>:<Sparkles size={18}/>} {busy?"جاري التصنيف...":"استخرج وصنّف كل الأسئلة"}</button>
+              {isAutoClassification
+                ? <p style={{color:palette.muted,fontSize:13,lineHeight:1.9}}>التصنيف التلقائي مفعّل. لن تحتاج لكتابة الفصول؛ سيستنتجها النظام من محتوى كل سؤال، ويمكنك تعديل الفصل بعد ظهور النتائج.</p>
+                : <>
+                    <p style={{color:palette.muted,fontSize:13,lineHeight:1.7}}>اكتب كل Chapter في سطر منفصل. سيتم حفظ قائمتك تلقائيًا لاستخدامها مع الملفات القادمة.</p>
+                    <textarea value={topicsText} onChange={e=>setTopicsText(e.target.value)} rows={9} style={{...fieldStyle,resize:"vertical",lineHeight:1.8}}/>
+                    <button type="button" onClick={()=>{try{localStorage.setItem(TOPICS_KEY,topics.join("\n"));setStatus("تم حفظ قائمة الـChapters على هذا الجهاز.");}catch{setError("تعذر حفظ الموضوعات في المتصفح.");}}} style={{...buttonStyle,marginTop:10,background:palette.soft,color:palette.text}}>حفظ الـChapters</button>
+                  </>
+              }
+              <button type="button" disabled={busy||!examText.trim()||(!isAutoClassification&&!topics.length)} onClick={generateExam} style={{...buttonStyle,width:"100%",justifyContent:"center",marginTop:12,opacity:busy||!examText.trim()||(!isAutoClassification&&!topics.length) ? .6 : 1}}>{busy?<Loader2 size={18} className="exam-studio-spin"/>:<Sparkles size={18}/>} {busy?"جاري التصنيف...":"استخرج وصنّف كل الأسئلة"}</button>
             </div>
           </section>
           {(status||error)&&<div role="status" style={{marginTop:16,padding:13,borderRadius:12,background:error?(dark?"#451f28":"#fff1f2"):palette.soft,color:error?(dark?"#fecdd3":"#be123c"):palette.text}}>{error||status}</div>}
