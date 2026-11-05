@@ -1,96 +1,116 @@
 
-import React, { useEffect, useRef, useState } from "react";
-import {
-  Stethoscope,
-  Brain,
-  BookOpen,
-  ClipboardList,
-  Search,
-  GraduationCap,
-  Sparkles,
-  ChevronLeft,
-  X,
-  Moon,
-  Sun,
-  Activity,
-  HeartPulse,
-  MessageCircle,
-  ArrowRight,
-  CheckCircle2,
-  Send,
-  RotateCcw,
-  UserRound,
-  Bot,
-  Clock3,
-  Loader2,
-  AlertTriangle,
-  Microscope,
-  ClipboardCheck,
-} from "lucide-react";
+                  <div
+                    className="dashboard-tool-icon"
+                    style={{
+                      background: tool.bg,
+                      color: tool.color,
+                    }}
+                  >
+                    <Icon size={26} />
+                  </div>
 
-import Tutor from "./Tutor.jsx";
-import HealthAssistant from "./HealthAssistant.jsx";
+                  <div
+                    className="dashboard-tool-subtitle"
+                    style={{ color: tool.color }}
+                  >
+                    {tool.subtitle}
+                  </div>
 
-const API_URL =
-  "https://medmind-test.mohamedradey2hh0.workers.dev/";
+                  <h3>
+                    {tool.title}
+                  </h3>
 
-const tools = [
-  {
-    id: "assistant",
-    icon: Brain,
-    title: "المساعد الطبي الذكي",
-    subtitle: "Medical AI Tutor",
-    desc: "اسأل عن أي موضوع طبي واحصل على شرح منظم ومبسط.",
-    color: "#0D9488",
-    bg: "#E0F2F1",
-  },
-  {
-    id: "health",
-    icon: HeartPulse,
-    title: "المساعد الصحي الذكي",
-    subtitle: "AI Health Assistant",
-    desc: "تحدث عن مشكلتك الصحية وافهم أعراضك واحصل على توجيه صحي مبدئي.",
-    color: "#0D9488",
-    bg: "#CCFBF1",
-  },
-  {
-    id: "lectures",
-    icon: BookOpen,
-    title: "مساعد المحاضرات",
-    subtitle: "Lecture Assistant",
-    desc: "نظّم محاضراتك واستعد لفهمها ومراجعتها.",
-    color: "#2563EB",
-    bg: "#DBEAFE",
-  },
-  {
-    id: "questions",
-    icon: ClipboardList,
-    title: "بنك الأسئلة",
-    subtitle: "MCQ Bank",
-    desc: "تدرّب على أسئلة الاختيار من متعدد وافهم الإجابات.",
-    color: "#D97706",
-    bg: "#FEF3C7",
-  },
-  {
-    id: "cases",
-    icon: Stethoscope,
-    title: "الحالات الإكلينيكية",
-    subtitle: "Clinical Cases",
-    desc: "طوّر تفكيرك الإكلينيكي من خلال حالات تدريبية تفاعلية.",
-    color: "#7C3AED",
-    bg: "#EDE9FE",
-  },
-];
+                  <p>
+                    {tool.desc}
+                  </p>
 
-const THEME_KEY = "medmind-theme";
+                  <span
+                    className="dashboard-tool-link"
+                    style={{ color: tool.color }}
+                  >
+                    {tool.id === "health"
+                      ? "ابدأ الاستشارة"
+                      : tool.id === "cases"
+                        ? "ابدأ التدريب"
+                        : "استكشف الأداة"
+                    }
 
-const specialties = [
-  {
-    name: "Internal Medicine",
-    ar: "الباطنة",
-    icon: HeartPulse,
-    color: "#0D9488",
-    caseId: "internal_chest_pain",
-    caseTitle: "Chest Pain",
-  },
-  {
+                    <ChevronLeft size={17} />
+                  </span>
+
+                </button>
+              );
+            })}
+          </div>
+
+
+          {filteredTools.length === 0 && (
+            <p className="dashboard-empty">
+              لا توجد أدوات مطابقة للبحث.
+            </p>
+          )}
+
+        </section>
+
+
+        {selectedTool && (
+          <section className="selected-tool-panel">
+
+            <div className="selected-tool-heading">
+              <h2>
+                {selectedTool.title}
+              </h2>
+
+              <button
+                type="button"
+                onClick={() => setSelected(null)}
+                aria-label="إغلاق"
+              >
+                <X size={20} />
+              </button>
+            </div>
+
+            <p>
+              {selectedTool.desc}
+            </p>
+
+            <p className="development-note">
+              هذه الأداة قيد التطوير. سنضيف وظائفها الفعلية في المراحل القادمة.
+            </p>
+
+          </section>
+        )}
+
+
+        <section
+          id="about"
+          className="dashboard-about"
+        >
+          <GraduationCap
+            size={45}
+            className="about-graduation-icon"
+          />
+
+          <div>
+            <h2>
+              التعلم والرعاية الصحية بطريقة أذكى
+            </h2>
+
+            <p>
+              MedMind منصة تهدف إلى مساعدة طلاب الطب على التعلم
+              والتدريب، ومساعدة المستخدمين على فهم المعلومات الصحية
+              والحصول على التوجيه المناسب.
+            </p>
+          </div>
+        </section>
+
+      </main>
+
+
+      <footer className="dashboard-footer">
+        © 2026 MedMind · Made for learning and better health
+      </footer>
+
+    </div>
+  );
+}
