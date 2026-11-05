@@ -1856,17 +1856,17 @@ function ExamStudio({ darkMode, onBack }) {
     try {
       const extracted = await extractFileText(file);
       if (!extracted.trim()) throw new Error("مش قادر أستخرج نص من الملف. لو PDF عبارة عن صور ممسوحة ضوئيًا، استخدم OCR أو انسخ النص هنا.");
-      if (extracted.length > 24000) throw new Error("الملف كبير جدًا بعد استخراج النص. ارفع جزءًا من الامتحان لا يتجاوز 24,000 حرف.");
       setExamText(extracted);
       setFileName(file.name);
-      setStatus(`تمت قراءة الملف بنجاح (${extracted.length.toLocaleString()} حرف).`);
+      const estimatedParts = Math.ceil(extracted.length / 20000);
+      setStatus(`تمت قراءة الملف بنجاح (${extracted.length.toLocaleString()} حرف). سيتم تقسيمه تلقائيًا إلى ${estimatedParts} جزء أثناء التحليل.`);
     } catch (e) {
       setError(e.message || "حصلت مشكلة أثناء قراءة الملف."); setStatus("");
     }
     event.target.value = "";
   };
 
-  const parseStream = async (response) => {
+  const parseStream = async (response, previousOutput = "") => {
     if (!response.ok) {
       let message = "حصلت مشكلة في الاتصال بالمساعد.";
       try { message = (await response.json()).error || message; } catch {}
@@ -1876,7 +1876,8 @@ function ExamStudio({ darkMode, onBack }) {
     const reader = response.body.getReader();
     const decoder = new TextDecoder();
     let buffer = "";
-    let output = "";
+    let output = previousOutput;
+    if (output) setResult(output);
     while (true) {
       const { value, done } = await reader.read();
       if (done) break;
@@ -1900,18 +1901,43 @@ function ExamStudio({ darkMode, onBack }) {
     return output;
   };
 
+  const splitExamIntoChunks = (text, maxChars = 20000) => {
+    const chunks = [];
+    let remaining = text.trim();
+    while (remaining.length > maxChars) {
+      let cut = remaining.lastIndexOf("\n\n", maxChars);
+      if (cut < maxChars * 0.55) cut = remaining.lastIndexOf("\n", maxChars);
+      if (cut < maxChars * 0.55) cut = remaining.lastIndexOf(". ", maxChars);
+      if (cut < maxChars * 0.55) cut = maxChars;
+      else if (remaining.slice(cut, cut + 2) === "\n\n") cut += 2;
+      else if (remaining[cut] === "\n") cut += 1;
+      else if (remaining.slice(cut, cut + 2) === ". ") cut += 2;
+      chunks.push(remaining.slice(0, cut).trim());
+      remaining = remaining.slice(cut).trim();
+    }
+    if (remaining) chunks.push(remaining);
+    return chunks;
+  };
+
   const generateExam = async () => {
     if (!examText.trim()) { setError("ارفع ملف الامتحان أو الصق نصه الأول."); return; }
-    setBusy(true); setError(""); setResult(""); setStatus("نَبْراس بيحلّل محتوى الامتحان...");
+    setBusy(true); setError(""); setResult("");
     try {
-      const prompt = `${instruction}\n\nعدد الأسئلة المطلوب: ${questionCount}.\n\nالتزم بالنص المرفوع فقط. لا تخترع سؤالًا أو معلومة غير مدعومة بالمصدر. لو الإجابة غير واضحة اذكر ذلك صراحة. نظّم الناتج بعناوين واضحة، ورقّم الأسئلة، واكتب الاختيارات، ثم الإجابة الصحيحة، وشرح سبب صحتها وسبب خطأ باقي الاختيارات، وHigh-yield note عند توافرها.`;
-      const response = await fetch(API_URL, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ mode: "exam_studio", question: prompt, examText: examText.slice(0, 24000) }),
-      });
-      await parseStream(response);
-      setStatus("اكتمل تحليل الامتحان. تقدر تراجع النتيجة أو تصدّرها.");
+      const chunks = splitExamIntoChunks(examText);
+      const basePrompt = `${instruction}\n\nعدد الأسئلة المطلوب: ${questionCount}.\n\nالتزم بالنص المرفوع فقط. لا تخترع سؤالًا أو معلومة غير مدعومة بالمصدر. لو الإجابة غير واضحة اذكر ذلك صراحة. نظّم الناتج بعناوين واضحة، ورقّم الأسئلة، واكتب الاختيارات، ثم الإجابة الصحيحة، وشرح سبب صحتها وسبب خطأ باقي الاختيارات، وHigh-yield note عند توافرها.`;
+      let combinedOutput = "";
+      for (let index = 0; index < chunks.length; index++) {
+        setStatus(`نَبْراس بيحلّل الجزء ${index + 1} من ${chunks.length}...`);
+        const prompt = `${basePrompt}\n\nمهم: هذا الجزء ${index + 1} من ${chunks.length} من نفس الامتحان. حلّل الأسئلة الموجودة في هذا الجزء فقط، وحافظ على أرقامها الأصلية إن وُجدت. لا تفترض أن بقية أجزاء الامتحان موجودة هنا.`;
+        const response = await fetch(API_URL, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ mode: "exam_studio", question: prompt, examText: chunks[index] }),
+        });
+        const separator = combinedOutput ? `\n\n━━━━━━━━━━━━━━━━━━━━\nالجزء ${index + 1} من ${chunks.length}\n━━━━━━━━━━━━━━━━━━━━\n\n` : "";
+        combinedOutput = await parseStream(response, combinedOutput + separator);
+      }
+      setStatus(`اكتمل تحليل الامتحان بالكامل (${chunks.length} جزء). تقدر تراجع النتيجة أو تصدّرها.`);
     } catch (e) {
       setError(e.message || "حصل خطأ غير متوقع."); setStatus("");
     } finally { setBusy(false); }
@@ -1953,13 +1979,13 @@ function ExamStudio({ darkMode, onBack }) {
           <div style={{ background: palette.card, border: `1px solid ${palette.border}`, borderRadius: 18, padding: 20 }}>
             <h2 style={{ marginTop: 0, fontSize: 19 }}><Upload size={19} style={{ verticalAlign: "middle", marginLeft: 7 }}/> ملف الامتحان</h2>
             <label style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 10, padding: 24, border: `2px dashed ${palette.accent}`, borderRadius: 14, cursor: "pointer", background: palette.soft, textAlign: "center" }}>
-              <FileText size={34} color={palette.accent}/><strong>اضغط لاختيار ملف</strong><span style={{ color: palette.muted, fontSize: 12 }}>PDF · DOCX · TXT · MD · CSV (حتى 12 MB)</span>
+              <FileText size={34} color={palette.accent}/><strong>اضغط لاختيار ملف</strong><span style={{ color: palette.muted, fontSize: 12 }}>PDF · DOCX · TXT · MD · CSV (حتى 12 MB) · تقسيم تلقائي للملفات الكبيرة</span>
               <input type="file" accept=".pdf,.docx,.txt,.md,.csv" onChange={handleFile} style={{ display: "none" }}/>
             </label>
             {fileName && <p style={{ color: palette.accent, fontSize: 13, marginBottom: 8 }}>الملف: {fileName}</p>}
             <label style={{ display: "block", margin: "16px 0 8px", fontWeight: 700 }}>أو الصق نص الامتحان هنا</label>
             <textarea value={examText} onChange={e => { setExamText(e.target.value); setFileName(""); }} rows={9} placeholder="الصق الأسئلة أو محتوى الامتحان هنا..." style={{ ...fieldStyle, resize: "vertical", lineHeight: 1.7 }}/>
-            <div style={{ display: "flex", justifyContent: "space-between", color: palette.muted, fontSize: 12, marginTop: 7 }}><span>{examText.length.toLocaleString()} / 24,000 حرف</span><button type="button" onClick={() => { setExamText(""); setFileName(""); setResult(""); setError(""); setStatus(""); }} style={{ border: 0, background: "transparent", color: palette.muted, cursor: "pointer" }}><Trash2 size={14} style={{ verticalAlign: "middle" }}/> مسح</button></div>
+            <div style={{ display: "flex", justifyContent: "space-between", color: palette.muted, fontSize: 12, marginTop: 7 }}><span>{examText.length.toLocaleString()} حرف</span><button type="button" onClick={() => { setExamText(""); setFileName(""); setResult(""); setError(""); setStatus(""); }} style={{ border: 0, background: "transparent", color: palette.muted, cursor: "pointer" }}><Trash2 size={14} style={{ verticalAlign: "middle" }}/> مسح</button></div>
           </div>
           <div style={{ background: palette.card, border: `1px solid ${palette.border}`, borderRadius: 18, padding: 20 }}>
             <h2 style={{ marginTop: 0, fontSize: 19 }}><Sparkles size={19} style={{ verticalAlign: "middle", marginLeft: 7 }}/> إعداد التحليل</h2>
