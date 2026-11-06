@@ -1931,6 +1931,20 @@ function ExamStudio({ darkMode, onBack }) {
     }
     if (rest) chunks.push(rest); return chunks;
   };
+  // Worker emits each SSE event as one JSON object on a single `data:` line.
+  // Parse that line alone; joining unrelated lines can corrupt the JSON payload.
+  const parseNebrasStreamFrame = frame => {
+    const line = String(frame || "").split(/\r?\n/).find(x => /^data:\s*/.test(x));
+    if (!line) return null;
+    const payload = line.replace(/^data:\s*/, "").trim();
+    if (!payload || payload === "[DONE]") return null;
+    try {
+      return JSON.parse(payload);
+    } catch (error) {
+      throw new Error("وصلت حزمة بث غير سليمة من Worker أثناء توليد الأسئلة. أعد المحاولة؛ وإذا تكرر الخطأ أرسل لي ملف App.jsx ولقطة من Console.");
+    }
+  };
+
   const parseJsonQuestions = raw => {
     const cleaned = String(raw || "").replace(/^```(?:json)?\s*/i, "").replace(/\s*```$/, "").trim();
     const first = cleaned.indexOf("{");
@@ -1999,9 +2013,20 @@ ${isAutoClassification
         while (true) {
           const { value, done } = await reader.read(); if (done) break;
           buffer += decoder.decode(value, { stream: true }); const frames = buffer.split(/\r?\n\r?\n/); buffer = frames.pop() || "";
-          for (const frame of frames) { const data = frame.split(/\r?\n/).filter(x => x.startsWith("data:")).map(x => x.slice(5).trim()).join("\n"); if (!data || data === "[DONE]") continue; const parsed = JSON.parse(data); if (parsed.error) throw new Error(parsed.error); if (parsed.text) output += parsed.text; }
+          for (const frame of frames) {
+            const parsed = parseNebrasStreamFrame(frame);
+            if (!parsed) continue;
+            if (parsed.error) throw new Error(parsed.error);
+            if (typeof parsed.text === "string") output += parsed.text;
+          }
         }
-        if (buffer.trim()) { const data = buffer.split(/\r?\n/).filter(x=>x.startsWith("data:")).map(x=>x.slice(5).trim()).join("\n"); if (data && data !== "[DONE]") { const parsed=JSON.parse(data); if(parsed.text) output+=parsed.text; if(parsed.error) throw new Error(parsed.error); } }
+        if (buffer.trim()) {
+          const parsed = parseNebrasStreamFrame(buffer);
+          if (parsed) {
+            if (parsed.error) throw new Error(parsed.error);
+            if (typeof parsed.text === "string") output += parsed.text;
+          }
+        }
         extracted = extracted.concat(parseJsonQuestions(output));
       }
       // Keep only allowed topics; any unexpected topic is explicitly unclassified.
