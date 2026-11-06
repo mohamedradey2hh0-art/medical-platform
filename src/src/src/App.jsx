@@ -1785,8 +1785,46 @@ function ClinicalCases({ darkMode, onBack }) {
 // NEBRAS EXAM STUDIO
 // ==========================================
 
+// Personal sources are stored locally in IndexedDB (per browser/device).
+// Shared sources require authenticated server-side storage and are intentionally
+// not exposed as public until that backend is configured.
+const NEBRAS_DB_NAME = "nebras-exam-studio-db";
+const NEBRAS_DB_VERSION = 1;
+const NEBRAS_STORE = "personal-sources";
+
+function openNebrasDB() {
+  return new Promise((resolve, reject) => {
+    if (!window.indexedDB) return reject(new Error("المتصفح لا يدعم التخزين المحلي للمصادر."));
+    const request = window.indexedDB.open(NEBRAS_DB_NAME, NEBRAS_DB_VERSION);
+    request.onupgradeneeded = () => {
+      const db = request.result;
+      if (!db.objectStoreNames.contains(NEBRAS_STORE)) db.createObjectStore(NEBRAS_STORE, { keyPath: "id" });
+    };
+    request.onsuccess = () => resolve(request.result);
+    request.onerror = () => reject(request.error || new Error("تعذر فتح مكتبة المصادر الشخصية."));
+  });
+}
+
+async function nebrasSourceRequest(mode, action, value) {
+  const db = await openNebrasDB();
+  return new Promise((resolve, reject) => {
+    const tx = db.transaction(NEBRAS_STORE, mode);
+    const store = tx.objectStore(NEBRAS_STORE);
+    const request = action === "all" ? store.getAll() : action === "put" ? store.put(value) : store.delete(value);
+    request.onsuccess = () => resolve(request.result);
+    request.onerror = () => reject(request.error || new Error("تعذر تنفيذ العملية على المصدر."));
+    tx.oncomplete = () => db.close();
+    tx.onerror = () => { db.close(); reject(tx.error || new Error("فشلت عملية حفظ المصدر.")); };
+  });
+}
+
 function ExamStudio({ darkMode, onBack }) {
   const TOPICS_KEY = "nebras-exam-studio-topics-v3";
+  const [sourceMode, setSourceMode] = useState("personal");
+  const [personalSources, setPersonalSources] = useState([]);
+  const [sourceBusy, setSourceBusy] = useState(false);
+  const [activeSourceId, setActiveSourceId] = useState("");
+  const [sourceTitle, setSourceTitle] = useState("");
   const [fileName, setFileName] = useState("");
   const [examText, setExamText] = useState("");
   const [subject, setSubject] = useState("");
@@ -1812,6 +1850,46 @@ function ExamStudio({ darkMode, onBack }) {
   };
   const topics = [...new Set(topicsText.split(/\r?\n|,/).map(x => x.trim()).filter(Boolean))];
   const isAutoClassification = classificationMode === "auto";
+
+  useEffect(() => {
+    let alive = true;
+    nebrasSourceRequest("readonly", "all").then(rows => {
+      if (alive) setPersonalSources((rows || []).sort((a,b) => (b.updatedAt || 0) - (a.updatedAt || 0)));
+    }).catch(() => { if (alive) setError("تعذر تحميل المصادر الشخصية من هذا المتصفح."); });
+    return () => { alive = false; };
+  }, []);
+
+  const savePersonalSource = async () => {
+    if (!examText.trim()) { setError("ارفع ملفًا أو الصق نص المصدر أولًا قبل الحفظ."); return; }
+    setSourceBusy(true); setError("");
+    try {
+      const now = Date.now();
+      const id = activeSourceId || (window.crypto?.randomUUID ? window.crypto.randomUUID() : `src-${now}-${Math.random().toString(36).slice(2,8)}`);
+      const previous = personalSources.find(x => x.id === id);
+      const record = { id, title: (sourceTitle.trim() || fileName || previous?.title || "مصدر بدون اسم").slice(0,120), fileName: fileName || previous?.fileName || "نص ملصق", subject: subject.trim(), text: examText, questions: questions.length ? questions : (previous?.questions || []), createdAt: previous?.createdAt || now, updatedAt: now };
+      await nebrasSourceRequest("readwrite", "put", record);
+      const rows = await nebrasSourceRequest("readonly", "all");
+      setPersonalSources((rows || []).sort((a,b) => (b.updatedAt || 0) - (a.updatedAt || 0)));
+      setActiveSourceId(id); setSourceTitle(record.title); setStatus("تم حفظ المصدر في مصادرك الخاصة على هذا الجهاز.");
+    } catch (e) { setError(e.message || "تعذر حفظ المصدر. قد تكون مساحة التخزين ممتلئة."); }
+    finally { setSourceBusy(false); }
+  };
+
+  const loadPersonalSource = source => {
+    setExamText(source.text || ""); setFileName(source.fileName || ""); setSubject(source.subject || "");
+    setQuestions(Array.isArray(source.questions) ? source.questions : []); setActiveSourceId(source.id); setSourceTitle(source.title || "");
+    setQuizQuestions(null); setError(""); setStatus(`تم فتح المصدر: ${source.title}`);
+  };
+
+  const deletePersonalSource = async id => {
+    if (!window.confirm("هل تريد حذف هذا المصدر من هذا الجهاز؟")) return;
+    try {
+      await nebrasSourceRequest("readwrite", "delete", id);
+      setPersonalSources(rows => rows.filter(x => x.id !== id));
+      if (activeSourceId === id) { setActiveSourceId(""); setSourceTitle(""); }
+      setStatus("تم حذف المصدر من هذا الجهاز.");
+    } catch (e) { setError(e.message || "تعذر حذف المصدر."); }
+  };
   const loadScript = (src, test) => new Promise((resolve, reject) => {
     if (test()) return resolve();
     const existing = document.querySelector(`script[data-nebras-src="${src}"]`);
@@ -1840,7 +1918,7 @@ function ExamStudio({ darkMode, onBack }) {
   const handleFile = async event => {
     const file = event.target.files?.[0]; if (!file) return;
     setError(""); setStatus("جاري قراءة الملف..."); setQuestions([]);
-    try { const text = await extractFileText(file); if (!text.trim()) throw new Error("لم أستطع استخراج نص. قد يحتاج الملف المصوّر إلى OCR."); setExamText(text); setFileName(file.name); setStatus(`تمت قراءة الملف (${text.length.toLocaleString()} حرف).`); }
+    try { const text = await extractFileText(file); if (!text.trim()) throw new Error("لم أستطع استخراج نص. قد يحتاج الملف المصوّر إلى OCR."); setExamText(text); setFileName(file.name); setSourceTitle(current => current || file.name.replace(/\.[^.]+$/, "")); setActiveSourceId(""); setStatus(`تمت قراءة الملف (${text.length.toLocaleString()} حرف).`); }
     catch (e) { setError(e.message || "تعذرت قراءة الملف."); setStatus(""); }
     event.target.value = "";
   };
@@ -1931,6 +2009,16 @@ ${isAutoClassification
       const counters = {};
       const numbered = uniqueQuestions.map(q => { counters[q.topic] = (counters[q.topic] || 0) + 1; return { ...q, displayNumber: counters[q.topic] }; });
       setQuestions(numbered);
+      if (activeSourceId) {
+        const savedSource = personalSources.find(x => x.id === activeSourceId);
+        if (savedSource) {
+          try {
+            const updated = { ...savedSource, questions: numbered, subject: subject.trim() || savedSource.subject || "", updatedAt: Date.now() };
+            await nebrasSourceRequest("readwrite", "put", updated);
+            setPersonalSources(rows => rows.map(x => x.id === activeSourceId ? updated : x));
+          } catch { /* The generated questions remain available in the current session. */ }
+        }
+      }
       const unclassified = numbered.filter(q => q.topic === "Unclassified").length;
       setStatus(`اكتمل التحليل: ${numbered.length} سؤال بعد إزالة التكرار. ${isAutoClassification ? "تم استنتاج الـChapters تلقائيًا." : "تم الالتزام بالـChapters التي حددتها."} غير مصنف: ${unclassified}. تمت إعادة الترقيم من 1 داخل كل Chapter.`);
     } catch (e) { setError(e.message || "حدث خطأ أثناء التحليل."); setStatus(""); }
@@ -1942,14 +2030,7 @@ ${isAutoClassification
       const counters = {}; return copy.map(q => { counters[q.topic] = (counters[q.topic] || 0) + 1; return { ...q, displayNumber: counters[q.topic] }; });
     });
   };
-  // Build chapter selectors from the chapters actually returned by the model.
-  // In automatic mode `topics` is intentionally empty, so using it alone hid
-  // every inferred chapter from the chapter cards and filters.
-  const questionTopics = [...new Set(questions.map(q => String(q.topic || "Unclassified").trim()).filter(Boolean))];
-  const chapterNames = [
-    ...new Set([...(isAutoClassification ? [] : topics), ...questionTopics.filter(t => t !== "Unclassified")])
-  ].sort((a, b) => a.localeCompare(b));
-  if (questionTopics.includes("Unclassified")) chapterNames.push("Unclassified");
+  const chapterNames = [...topics, ...(questions.some(q => q.topic === "Unclassified") ? ["Unclassified"] : [])];
   const chapterCounts = chapterNames.map(topic => ({ topic, count: questions.filter(q => q.topic === topic).length }));
   const startQuiz = topic => {
     const chosen = topic === "All" ? questions : questions.filter(q => q.topic === topic);
@@ -1981,6 +2062,22 @@ ${isAutoClassification
         </section>
         {!quizQuestions && <>
           <section style={{background:palette.card,border:`1px solid ${palette.border}`,borderRadius:18,padding:18,marginBottom:16}}>
+            <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",gap:12,flexWrap:"wrap"}}>
+              <div><div style={{fontSize:12,fontWeight:900,color:palette.accent,letterSpacing:1}}>SOURCE LIBRARY</div><h2 style={{margin:"5px 0",fontSize:20}}>مصادر نَبْراس</h2><p style={{margin:0,color:palette.muted,fontSize:12,lineHeight:1.8}}>اختر مصدرًا محفوظًا أو أضف ملفًا جديدًا لتحويله إلى أسئلة وامتحانات.</p></div>
+              <div style={{display:"flex",gap:8,flexWrap:"wrap"}}>
+                <button type="button" onClick={()=>setSourceMode("shared")} style={{...buttonStyle,background:sourceMode==="shared"?palette.accent:palette.soft,color:sourceMode==="shared"?"white":palette.text}}>المكتبة الرسمية</button>
+                <button type="button" onClick={()=>setSourceMode("personal")} style={{...buttonStyle,background:sourceMode==="personal"?palette.accent:palette.soft,color:sourceMode==="personal"?"white":palette.text}}>مصادري الخاصة ({personalSources.length})</button>
+              </div>
+            </div>
+            {sourceMode==="shared" ? <div style={{marginTop:15,padding:15,borderRadius:13,border:`1px dashed ${palette.border}`,background:palette.soft}}>
+              <strong>المكتبة الرسمية — Shared Sources</strong><p style={{margin:"7px 0 0",fontSize:13,lineHeight:1.9,color:palette.muted}}>واجهة المكتبة جاهزة، لكن لا توجد مصادر رسمية منشورة ومتصلة بالخادم في هذه النسخة. لن نعرض ملفات الطلاب لبعضهم أو نخلطها بالمكتبة الرسمية. تفعيل المشاركة يتطلب قاعدة بيانات وتسجيل دخول وصلاحيات وصول على الخادم.</p>
+              <span style={{display:"inline-block",marginTop:9,fontSize:11,fontWeight:800,color:palette.muted}}>بانتظار ربط التخزين المشترك والصلاحيات</span>
+            </div> : <div style={{marginTop:15}}>
+              {personalSources.length===0 ? <div style={{padding:16,borderRadius:13,background:palette.soft,color:palette.muted,fontSize:13,lineHeight:1.9}}>لسه مفيش مصادر محفوظة. ارفع ملفًا من القسم التالي، ثم اضغط «حفظ في مصادري الخاصة» علشان تقدر ترجع له بعدين على نفس المتصفح والجهاز.</div> : <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(220px,1fr))",gap:10}}>{personalSources.map(source=><article key={source.id} style={{padding:13,border:`1px solid ${palette.border}`,borderRadius:13,background:palette.soft,minWidth:0}}><div style={{display:"flex",justifyContent:"space-between",gap:8,alignItems:"start"}}><strong style={{fontSize:14,overflowWrap:"anywhere"}}>{source.title}</strong><button type="button" title="حذف المصدر" onClick={()=>deletePersonalSource(source.id)} style={{border:0,background:"transparent",color:palette.muted,cursor:"pointer"}}><Trash2 size={16}/></button></div><p style={{fontSize:11,color:palette.muted,margin:"7px 0",lineHeight:1.7}}>{source.subject||"بدون مادة محددة"} · {(source.text||"").length.toLocaleString()} حرف · {(source.questions||[]).length} سؤال محفوظ</p><button type="button" onClick={()=>loadPersonalSource(source)} style={{...buttonStyle,width:"100%",justifyContent:"center",padding:"9px 11px",background:activeSourceId===source.id?"#2563eb":palette.accent}}>{activeSourceId===source.id?"المصدر الحالي":"فتح المصدر"}</button></article>)}</div>}
+              <p style={{fontSize:11,color:palette.muted,margin:"12px 0 0",lineHeight:1.8}}>خصوصية التخزين: المصادر محفوظة محليًا داخل متصفحك باستخدام IndexedDB، ولا تُرفع إلى خادم مشترك في هذه المرحلة. مسح بيانات المتصفح قد يؤدي لفقدها؛ صدّر أو احتفظ بنسخة أصلية من ملفاتك.</p>
+            </div>}
+          </section>
+          <section style={{background:palette.card,border:`1px solid ${palette.border}`,borderRadius:18,padding:18,marginBottom:16}}>
             <label style={{display:"block",fontWeight:800,marginBottom:8}}>المادة / Subject (اختياري لكنه يساعد على دقة التصنيف)</label>
             <input value={subject} onChange={e=>setSubject(e.target.value)} placeholder="مثال: Pediatrics, Internal Medicine, Surgery..." style={fieldStyle}/>
             <label style={{display:"block",fontWeight:800,margin:"16px 0 8px"}}>طريقة تحديد الـChapter</label>
@@ -1995,8 +2092,9 @@ ${isAutoClassification
               <h2 style={{marginTop:0,fontSize:19}}><Upload size={19} style={{verticalAlign:"middle",marginLeft:7}}/> ملف الامتحان</h2>
               <label style={{display:"flex",flexDirection:"column",alignItems:"center",gap:10,padding:24,border:`2px dashed ${palette.accent}`,borderRadius:14,cursor:"pointer",background:palette.soft,textAlign:"center"}}><FileText size={34} color={palette.accent}/><strong>اضغط لاختيار ملف</strong><span style={{color:palette.muted,fontSize:12}}>PDF · DOCX · TXT · MD · CSV (حتى 12 MB)</span><input type="file" accept=".pdf,.docx,.txt,.md,.csv" onChange={handleFile} style={{display:"none"}}/></label>
               {fileName && <p style={{color:palette.accent,fontSize:13}}>الملف: {fileName}</p>}
-              <label style={{display:"block",margin:"16px 0 8px",fontWeight:700}}>أو الصق نص الامتحان</label><textarea value={examText} onChange={e=>{setExamText(e.target.value);setFileName("");}} rows={9} placeholder="الصق الأسئلة ومفتاح الإجابات هنا..." style={{...fieldStyle,resize:"vertical",lineHeight:1.7}}/>
-              <div style={{display:"flex",justifyContent:"space-between",color:palette.muted,fontSize:12,marginTop:7}}><span>{examText.length.toLocaleString()} حرف</span><button type="button" onClick={()=>{setExamText("");setFileName("");setQuestions([]);setError("");setStatus("");}} style={{border:0,background:"transparent",color:palette.muted,cursor:"pointer"}}><Trash2 size={14} style={{verticalAlign:"middle"}}/> مسح</button></div>
+              <label style={{display:"block",margin:"16px 0 8px",fontWeight:700}}>اسم المصدر (اختياري)</label><input value={sourceTitle} onChange={e=>setSourceTitle(e.target.value)} placeholder="مثال: Pediatrics - Respiratory" style={fieldStyle}/><label style={{display:"block",margin:"16px 0 8px",fontWeight:700}}>أو الصق نص الامتحان</label><textarea value={examText} onChange={e=>{setExamText(e.target.value);setFileName("");setActiveSourceId("");}} rows={9} placeholder="الصق الأسئلة ومفتاح الإجابات هنا..." style={{...fieldStyle,resize:"vertical",lineHeight:1.7}}/>
+              <div style={{display:"flex",justifyContent:"space-between",color:palette.muted,fontSize:12,marginTop:7}}><span>{examText.length.toLocaleString()} حرف</span><button type="button" onClick={()=>{setExamText("");setFileName("");setSourceTitle("");setActiveSourceId("");setQuestions([]);setError("");setStatus("");}} style={{border:0,background:"transparent",color:palette.muted,cursor:"pointer"}}><Trash2 size={14} style={{verticalAlign:"middle"}}/> مسح</button></div>
+              <button type="button" disabled={!examText.trim()||sourceBusy} onClick={savePersonalSource} style={{...buttonStyle,width:"100%",justifyContent:"center",marginTop:12,opacity:(!examText.trim()||sourceBusy) ? .6 : 1}}>{sourceBusy?"جاري الحفظ...":activeSourceId?"تحديث المصدر المحفوظ":"حفظ في مصادري الخاصة"}</button>
             </div>
             <div style={{background:palette.card,border:`1px solid ${palette.border}`,borderRadius:18,padding:20}}>
               <h2 style={{marginTop:0,fontSize:19}}><ClipboardList size={19} style={{verticalAlign:"middle",marginLeft:7}}/> الموضوعات / Chapters</h2>
