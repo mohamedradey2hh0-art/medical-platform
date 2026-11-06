@@ -15,10 +15,56 @@ import {
   Sun
 } from "lucide-react";
 
-function formatInline(text) {
-  return text.split(/(\*\*.*?\*\*)/g).map((part, index) => {
+function safeHttpUrl(value) {
+  try {
+    const parsed = new URL(value);
+    return parsed.protocol === "https:" || parsed.protocol === "http:"
+      ? parsed.href
+      : null;
+  } catch {
+    return null;
+  }
+}
+
+function formatInline(text, darkMode = false) {
+  const pattern = /(\*\*[^*]+\*\*|`[^`]+`|\*[^*]+\*|\[[^\]]+\]\(https?:\/\/[^)\s]+\))/g;
+  return text.split(pattern).map((part, index) => {
     if (part.startsWith("**") && part.endsWith("**")) {
       return <strong key={index}>{part.slice(2, -2)}</strong>;
+    }
+    if (part.startsWith("`") && part.endsWith("`")) {
+      return (
+        <code
+          key={index}
+          style={{
+            background: darkMode ? "#0f172a" : "#e2e8f0",
+            color: darkMode ? "#bfdbfe" : "#1e40af",
+            padding: "2px 5px",
+            borderRadius: "5px",
+            fontSize: "0.92em"
+          }}
+        >
+          {part.slice(1, -1)}
+        </code>
+      );
+    }
+    if (part.startsWith("*") && part.endsWith("*")) {
+      return <em key={index}>{part.slice(1, -1)}</em>;
+    }
+    const link = part.match(/^\[([^\]]+)\]\((https?:\/\/[^)\s]+)\)$/);
+    if (link) {
+      const href = safeHttpUrl(link[2]);
+      return href ? (
+        <a
+          key={index}
+          href={href}
+          target="_blank"
+          rel="noopener noreferrer"
+          style={{ color: darkMode ? "#93c5fd" : "#1d4ed8", textDecoration: "underline" }}
+        >
+          {link[1]}
+        </a>
+      ) : part;
     }
     return part;
   });
@@ -28,108 +74,318 @@ function isArabic(text) {
   return /[\u0600-\u06FF]/.test(text);
 }
 
-function FormattedAnswer({ text, darkMode }) {
-  const lines = text.split("\n");
-  const elements = [];
-  let listItems = [];
-  let listType = null;
+function MermaidDiagram({ code, darkMode }) {
+  const encoded = (() => {
+    try {
+      return btoa(unescape(encodeURIComponent(code)));
+    } catch {
+      return "";
+    }
+  })();
 
-  const textColor = darkMode ? "#e2e8f0" : "#1e293b";
-  const headingColor = darkMode ? "#93c5fd" : "#1e40af";
-
-  function flushList() {
-    if (!listItems.length) return;
-
-    const ListTag = listType === "number" ? "ol" : "ul";
-
-    elements.push(
-      <ListTag
-        key={`list-${elements.length}`}
-        style={{
-          paddingInlineStart: "25px",
-          margin: "8px 0 14px",
-          lineHeight: 1.8,
-          color: textColor
-        }}
-      >
-        {listItems.map((item, index) => (
-          <li key={index} style={{ paddingInlineStart: "4px" }}>
-            {formatInline(item)}
-          </li>
-        ))}
-      </ListTag>
+  if (!encoded) {
+    return (
+      <pre style={{
+        overflowX: "auto",
+        padding: "14px",
+        borderRadius: "10px",
+        background: darkMode ? "#0f172a" : "#e2e8f0",
+        color: darkMode ? "#e2e8f0" : "#1e293b"
+      }}>
+        {code}
+      </pre>
     );
-
-    listItems = [];
-    listType = null;
   }
 
-  lines.forEach((line, index) => {
-    const trimmed = line.trim();
+  return (
+    <div style={{
+      margin: "14px 0 18px",
+      padding: "12px",
+      borderRadius: "12px",
+      background: darkMode ? "#ffffff" : "#ffffff",
+      border: `1px solid ${darkMode ? "#475569" : "#e2e8f0"}`,
+      overflow: "hidden"
+    }}>
+      <img
+        src={`https://mermaid.ink/img/${encoded}?bgColor=FFFFFF`}
+        alt="Educational medical flowchart"
+        loading="lazy"
+        referrerPolicy="no-referrer"
+        style={{ display: "block", width: "100%", maxHeight: "520px", objectFit: "contain" }}
+        onError={(event) => {
+          event.currentTarget.style.display = "none";
+        }}
+      />
+      <div style={{ color: "#64748b", fontSize: "11px", textAlign: "right", marginTop: "4px" }}>
+        Educational diagram
+      </div>
+    </div>
+  );
+}
+
+function FormattedAnswer({ text, darkMode }) {
+  const lines = String(text || "").split(/\r?\n/);
+  const elements = [];
+  const textColor = darkMode ? "#e2e8f0" : "#1e293b";
+  const headingColor = darkMode ? "#93c5fd" : "#1e40af";
+  const borderColor = darkMode ? "#475569" : "#cbd5e1";
+  const mutedBg = darkMode ? "#0f172a" : "#f1f5f9";
+
+  const isTableSeparator = (line) =>
+    /^\s*\|?\s*:?-{3,}:?\s*(\|\s*:?-{3,}:?\s*)+\|?\s*$/.test(line);
+
+  const tableCells = (line) =>
+    line.trim().replace(/^\|/, "").replace(/\|$/, "").split("|").map(cell => cell.trim());
+
+  const isBlockStart = (line) =>
+    /^```/.test(line.trim()) ||
+    /^#{1,3}\s+/.test(line.trim()) ||
+    /^[-*•]\s+/.test(line.trim()) ||
+    /^\d+[.)]\s+/.test(line.trim()) ||
+    /^>\s?/.test(line.trim()) ||
+    /^!\[[^\]]*\]\(https?:\/\/[^)\s]+\)\s*$/.test(line.trim()) ||
+    /^(\*\s*){3,}$|^(-\s*){3,}$|^(_\s*){3,}$/.test(line.trim()) ||
+    (line.includes("|") && line.trim().startsWith("|"));
+
+  let i = 0;
+  while (i < lines.length) {
+    const raw = lines[i];
+    const trimmed = raw.trim();
 
     if (!trimmed) {
-      flushList();
-      return;
+      i++;
+      continue;
     }
 
-    const bullet = trimmed.match(/^[-*•]\s+(.+)/);
-    const numbered = trimmed.match(/^\d+[.)]\s+(.+)/);
-
-    if (bullet || numbered) {
-      const currentType = numbered ? "number" : "bullet";
-
-      if (listType && listType !== currentType) flushList();
-
-      listType = currentType;
-      listItems.push((bullet || numbered)[1]);
-      return;
+    // Fenced code blocks, including Mermaid diagrams.
+    if (trimmed.startsWith("```")) {
+      const language = trimmed.slice(3).trim().toLowerCase();
+      const codeLines = [];
+      i++;
+      while (i < lines.length && !lines[i].trim().startsWith("```")) {
+        codeLines.push(lines[i]);
+        i++;
+      }
+      if (i < lines.length) i++;
+      const code = codeLines.join("\n").trim();
+      if (language === "mermaid") {
+        elements.push(<MermaidDiagram key={`mermaid-${i}`} code={code} darkMode={darkMode} />);
+      } else {
+        elements.push(
+          <pre
+            key={`code-${i}`}
+            style={{
+              whiteSpace: "pre-wrap",
+              overflowX: "auto",
+              padding: "14px",
+              borderRadius: "10px",
+              background: mutedBg,
+              color: textColor,
+              border: `1px solid ${borderColor}`,
+              fontSize: "13px",
+              lineHeight: 1.6
+            }}
+          >
+            <code>{code}</code>
+          </pre>
+        );
+      }
+      continue;
     }
 
-    flushList();
-
+    // Markdown headings.
     const heading = trimmed.match(/^(#{1,3})\s+(.+)/);
-
     if (heading) {
       const level = heading[1].length;
-      const HeadingTag =
-        level === 1 ? "h2" : level === 2 ? "h3" : "h4";
-
+      const HeadingTag = level === 1 ? "h2" : level === 2 ? "h3" : "h4";
       elements.push(
         <HeadingTag
-          key={index}
+          key={`heading-${i}`}
+          dir={isArabic(heading[2]) ? "rtl" : "auto"}
           style={{
             color: headingColor,
-            margin: "18px 0 8px",
+            margin: level === 1 ? "22px 0 10px" : "17px 0 8px",
             fontSize: level === 1 ? "21px" : level === 2 ? "18px" : "16px",
             lineHeight: 1.5
           }}
         >
-          {formatInline(heading[2])}
+          {formatInline(heading[2], darkMode)}
         </HeadingTag>
       );
-      return;
+      i++;
+      continue;
     }
 
-    const arabic = isArabic(trimmed);
+    // Horizontal divider.
+    if (/^(\*\s*){3,}$|^(-\s*){3,}$|^(_\s*){3,}$/.test(trimmed)) {
+      elements.push(
+        <hr key={`hr-${i}`} style={{ border: 0, borderTop: `1px solid ${borderColor}`, margin: "18px 0" }} />
+      );
+      i++;
+      continue;
+    }
 
+    // Standalone educational image.
+    const imageMatch = trimmed.match(/^!\[([^\]]*)\]\((https?:\/\/[^)\s]+)\)$/);
+    if (imageMatch) {
+      const imageUrl = safeHttpUrl(imageMatch[2]);
+      if (imageUrl) {
+        elements.push(
+          <figure
+            key={`image-${i}`}
+            style={{
+              margin: "14px 0 18px",
+              padding: "10px",
+              borderRadius: "12px",
+              background: darkMode ? "#0f172a" : "#ffffff",
+              border: `1px solid ${borderColor}`
+            }}
+          >
+            <img
+              src={imageUrl}
+              alt={imageMatch[1] || "Medical educational illustration"}
+              loading="lazy"
+              referrerPolicy="no-referrer"
+              style={{
+                display: "block",
+                width: "100%",
+                maxHeight: "430px",
+                objectFit: "contain",
+                borderRadius: "8px",
+                background: "#ffffff"
+              }}
+            />
+            {imageMatch[1] && (
+              <figcaption style={{ color: textColor, fontSize: "13px", marginTop: "8px", textAlign: "center" }}>
+                {imageMatch[1]}
+              </figcaption>
+            )}
+          </figure>
+        );
+      }
+      i++;
+      continue;
+    }
+
+    // Markdown tables.
+    if (trimmed.includes("|") && (trimmed.startsWith("|") || (i + 1 < lines.length && isTableSeparator(lines[i + 1])))) {
+      const tableLines = [];
+      while (i < lines.length && lines[i].trim().includes("|")) {
+        tableLines.push(lines[i].trim());
+        i++;
+      }
+      const rows = tableLines.filter(line => !isTableSeparator(line)).map(tableCells);
+      if (rows.length) {
+        const headers = rows[0];
+        elements.push(
+          <div key={`table-${i}`} style={{ overflowX: "auto", margin: "12px 0 18px", border: `1px solid ${borderColor}`, borderRadius: "10px" }}>
+            <table style={{ width: "100%", borderCollapse: "collapse", color: textColor, fontSize: "13px", minWidth: "360px" }}>
+              <thead>
+                <tr style={{ background: mutedBg }}>
+                  {headers.map((cell, index) => (
+                    <th key={index} style={{ textAlign: isArabic(cell) ? "right" : "left", padding: "10px", borderBottom: `1px solid ${borderColor}` }}>
+                      {formatInline(cell, darkMode)}
+                    </th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody>
+                {rows.slice(1).map((row, rowIndex) => (
+                  <tr key={rowIndex}>
+                    {headers.map((_, cellIndex) => (
+                      <td key={cellIndex} style={{ padding: "9px 10px", verticalAlign: "top", borderTop: `1px solid ${borderColor}`, lineHeight: 1.65 }}>
+                        {formatInline(row[cellIndex] || "", darkMode)}
+                      </td>
+                    ))}
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        );
+      }
+      continue;
+    }
+
+    // Blockquotes.
+    if (trimmed.startsWith(">")) {
+      const quoteLines = [];
+      while (i < lines.length && lines[i].trim().startsWith(">")) {
+        quoteLines.push(lines[i].trim().replace(/^>\s?/, ""));
+        i++;
+      }
+      elements.push(
+        <blockquote
+          key={`quote-${i}`}
+          dir={isArabic(quoteLines.join(" ")) ? "rtl" : "auto"}
+          style={{
+            margin: "10px 0 16px",
+            padding: "10px 14px",
+            borderInlineStart: "3px solid #3b82f6",
+            background: mutedBg,
+            borderRadius: "8px",
+            color: textColor,
+            lineHeight: 1.8
+          }}
+        >
+          {formatInline(quoteLines.join(" "), darkMode)}
+        </blockquote>
+      );
+      continue;
+    }
+
+    // Ordered and unordered lists.
+    const bullet = trimmed.match(/^[-*•]\s+(.+)/);
+    const numbered = trimmed.match(/^\d+[.)]\s+(.+)/);
+    if (bullet || numbered) {
+      const ordered = Boolean(numbered);
+      const items = [];
+      while (i < lines.length) {
+        const current = lines[i].trim();
+        const match = ordered ? current.match(/^\d+[.)]\s+(.+)/) : current.match(/^[-*•]\s+(.+)/);
+        if (!match) break;
+        items.push(match[1]);
+        i++;
+      }
+      const ListTag = ordered ? "ol" : "ul";
+      elements.push(
+        <ListTag key={`list-${i}`} style={{ paddingInlineStart: "25px", margin: "8px 0 14px", lineHeight: 1.8, color: textColor }}>
+          {items.map((item, index) => (
+            <li key={index} style={{ paddingInlineStart: "4px", marginBottom: "3px" }}>
+              {formatInline(item, darkMode)}
+            </li>
+          ))}
+        </ListTag>
+      );
+      continue;
+    }
+
+    // Normal paragraph; join wrapped source lines until the next Markdown block.
+    const paragraph = [trimmed];
+    i++;
+    while (i < lines.length && lines[i].trim() && !isBlockStart(lines[i])) {
+      paragraph.push(lines[i].trim());
+      i++;
+    }
+    const paragraphText = paragraph.join(" ");
+    const arabic = isArabic(paragraphText);
     elements.push(
       <p
-        key={index}
+        key={`paragraph-${i}`}
         dir={arabic ? "rtl" : "auto"}
         style={{
           margin: "7px 0 12px",
           textAlign: arabic ? "right" : "left",
           lineHeight: 1.85,
           fontSize: "15px",
-          color: textColor
+          color: textColor,
+          whiteSpace: "normal"
         }}
       >
-        {formatInline(trimmed)}
+        {formatInline(paragraphText, darkMode)}
       </p>
     );
-  });
-
-  flushList();
+  }
 
   return <div>{elements}</div>;
 }
