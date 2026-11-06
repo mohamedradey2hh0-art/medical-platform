@@ -1932,11 +1932,34 @@ function ExamStudio({ darkMode, onBack }) {
     if (rest) chunks.push(rest); return chunks;
   };
   const parseJsonQuestions = raw => {
-    const cleaned = raw.replace(/^```(?:json)?\s*/i, "").replace(/\s*```$/, "").trim();
-    const first = cleaned.indexOf("{"); const last = cleaned.lastIndexOf("}");
-    if (first < 0 || last <= first) throw new Error("تعذر قراءة النتيجة المنظمة من المحرك. جرّب تقسيم الملف أو تقليل حجمه.");
-    const data = JSON.parse(cleaned.slice(first, last + 1));
-    if (!Array.isArray(data.questions)) throw new Error("المحرك لم يرجع قائمة أسئلة صالحة.");
+    const cleaned = String(raw || "").replace(/^```(?:json)?\s*/i, "").replace(/\s*```$/, "").trim();
+    const first = cleaned.indexOf("{");
+    const last = cleaned.lastIndexOf("}");
+    if (first < 0 || last <= first) {
+      throw new Error("الذكاء الاصطناعي لم يُرجع JSON كاملًا. جرّب تقسيم الملف إلى أجزاء أصغر ثم أعد المحاولة.");
+    }
+    const jsonText = cleaned.slice(first, last + 1);
+    let data;
+    try {
+      data = JSON.parse(jsonText);
+    } catch (firstError) {
+      // Repair common Gemini JSON formatting slips without changing question text:
+      // unquoted object keys and trailing commas. Do not globally rewrite quotes,
+      // because apostrophes may legitimately occur inside question/explanation text.
+      const repaired = jsonText
+        .replace(/([{,]\s*)([A-Za-z_$][\w$]*)(\s*:)/g, '$1"$2"$3')
+        .replace(/,\s*([}\]])/g, '$1');
+      try {
+        data = JSON.parse(repaired);
+      } catch (repairError) {
+        const lineMatch = String(repairError.message || "").match(/line (\d+) column (\d+)/i);
+        const where = lineMatch ? ` (السطر ${lineMatch[1]}، العمود ${lineMatch[2]})` : "";
+        throw new Error(`تنسيق JSON الذي رجع من المحرك غير صالح${where}. غالبًا توجد فاصلة زائدة أو اسم خاصية بدون علامات اقتباس. أعد المحاولة؛ وإذا تكرر الخطأ قسّم الملف إلى أجزاء أصغر.`);
+      }
+    }
+    if (!data || !Array.isArray(data.questions)) {
+      throw new Error("المحرك لم يرجع قائمة أسئلة صالحة داخل JSON.");
+    }
     return data.questions;
   };
   const generateExam = async () => {
