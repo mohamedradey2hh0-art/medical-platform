@@ -1942,7 +1942,14 @@ ${isAutoClassification
       const counters = {}; return copy.map(q => { counters[q.topic] = (counters[q.topic] || 0) + 1; return { ...q, displayNumber: counters[q.topic] }; });
     });
   };
-  const chapterNames = [...topics, ...(questions.some(q => q.topic === "Unclassified") ? ["Unclassified"] : [])];
+  // Build chapter selectors from the chapters actually returned by the model.
+  // In automatic mode `topics` is intentionally empty, so using it alone hid
+  // every inferred chapter from the chapter cards and filters.
+  const questionTopics = [...new Set(questions.map(q => String(q.topic || "Unclassified").trim()).filter(Boolean))];
+  const chapterNames = [
+    ...new Set([...(isAutoClassification ? [] : topics), ...questionTopics.filter(t => t !== "Unclassified")])
+  ].sort((a, b) => a.localeCompare(b));
+  if (questionTopics.includes("Unclassified")) chapterNames.push("Unclassified");
   const chapterCounts = chapterNames.map(topic => ({ topic, count: questions.filter(q => q.topic === topic).length }));
   const startQuiz = topic => {
     const chosen = topic === "All" ? questions : questions.filter(q => q.topic === topic);
