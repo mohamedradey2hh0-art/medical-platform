@@ -15,56 +15,10 @@ import {
   Sun
 } from "lucide-react";
 
-function safeHttpUrl(value) {
-  try {
-    const parsed = new URL(value);
-    return parsed.protocol === "https:" || parsed.protocol === "http:"
-      ? parsed.href
-      : null;
-  } catch {
-    return null;
-  }
-}
-
-function formatInline(text, darkMode = false) {
-  const pattern = /(\*\*[^*]+\*\*|`[^`]+`|\*[^*]+\*|\[[^\]]+\]\(https?:\/\/[^)\s]+\))/g;
-  return text.split(pattern).map((part, index) => {
+function formatInline(text) {
+  return text.split(/(\*\*.*?\*\*)/g).map((part, index) => {
     if (part.startsWith("**") && part.endsWith("**")) {
       return <strong key={index}>{part.slice(2, -2)}</strong>;
-    }
-    if (part.startsWith("`") && part.endsWith("`")) {
-      return (
-        <code
-          key={index}
-          style={{
-            background: darkMode ? "#0f172a" : "#e2e8f0",
-            color: darkMode ? "#bfdbfe" : "#1e40af",
-            padding: "2px 5px",
-            borderRadius: "5px",
-            fontSize: "0.92em"
-          }}
-        >
-          {part.slice(1, -1)}
-        </code>
-      );
-    }
-    if (part.startsWith("*") && part.endsWith("*")) {
-      return <em key={index}>{part.slice(1, -1)}</em>;
-    }
-    const link = part.match(/^\[([^\]]+)\]\((https?:\/\/[^)\s]+)\)$/);
-    if (link) {
-      const href = safeHttpUrl(link[2]);
-      return href ? (
-        <a
-          key={index}
-          href={href}
-          target="_blank"
-          rel="noopener noreferrer"
-          style={{ color: darkMode ? "#93c5fd" : "#1d4ed8", textDecoration: "underline" }}
-        >
-          {link[1]}
-        </a>
-      ) : part;
     }
     return part;
   });
@@ -74,318 +28,103 @@ function isArabic(text) {
   return /[\u0600-\u06FF]/.test(text);
 }
 
-function MermaidDiagram({ code, darkMode }) {
-  const encoded = (() => {
-    try {
-      return btoa(unescape(encodeURIComponent(code)));
-    } catch {
-      return "";
-    }
-  })();
+function FormattedAnswer({ text }) {
+  const lines = text.split("\n");
+  const elements = [];
+  let listItems = [];
+  let listType = null;
 
-  if (!encoded) {
-    return (
-      <pre style={{
-        overflowX: "auto",
-        padding: "14px",
-        borderRadius: "10px",
-        background: darkMode ? "#0f172a" : "#e2e8f0",
-        color: darkMode ? "#e2e8f0" : "#1e293b"
-      }}>
-        {code}
-      </pre>
+  function flushList() {
+    if (!listItems.length) return;
+
+    const ListTag = listType === "number" ? "ol" : "ul";
+
+    elements.push(
+      <ListTag
+        key={`list-${elements.length}`}
+        style={{
+          paddingInlineStart: "25px",
+          margin: "8px 0 14px",
+          lineHeight: 1.8
+        }}
+      >
+        {listItems.map((item, index) => (
+          <li key={index} style={{ paddingInlineStart: "4px" }}>
+            {formatInline(item)}
+          </li>
+        ))}
+      </ListTag>
     );
+
+    listItems = [];
+    listType = null;
   }
 
-  return (
-    <div style={{
-      margin: "14px 0 18px",
-      padding: "12px",
-      borderRadius: "12px",
-      background: darkMode ? "#ffffff" : "#ffffff",
-      border: `1px solid ${darkMode ? "#475569" : "#e2e8f0"}`,
-      overflow: "hidden"
-    }}>
-      <img
-        src={`https://mermaid.ink/img/${encoded}?bgColor=FFFFFF`}
-        alt="Educational medical flowchart"
-        loading="lazy"
-        referrerPolicy="no-referrer"
-        style={{ display: "block", width: "100%", maxHeight: "520px", objectFit: "contain" }}
-        onError={(event) => {
-          event.currentTarget.style.display = "none";
-        }}
-      />
-      <div style={{ color: "#64748b", fontSize: "11px", textAlign: "right", marginTop: "4px" }}>
-        Educational diagram
-      </div>
-    </div>
-  );
-}
-
-function FormattedAnswer({ text, darkMode }) {
-  const lines = String(text || "").split(/\r?\n/);
-  const elements = [];
-  const textColor = darkMode ? "#e2e8f0" : "#1e293b";
-  const headingColor = darkMode ? "#93c5fd" : "#1e40af";
-  const borderColor = darkMode ? "#475569" : "#cbd5e1";
-  const mutedBg = darkMode ? "#0f172a" : "#f1f5f9";
-
-  const isTableSeparator = (line) =>
-    /^\s*\|?\s*:?-{3,}:?\s*(\|\s*:?-{3,}:?\s*)+\|?\s*$/.test(line);
-
-  const tableCells = (line) =>
-    line.trim().replace(/^\|/, "").replace(/\|$/, "").split("|").map(cell => cell.trim());
-
-  const isBlockStart = (line) =>
-    /^```/.test(line.trim()) ||
-    /^#{1,3}\s+/.test(line.trim()) ||
-    /^[-*•]\s+/.test(line.trim()) ||
-    /^\d+[.)]\s+/.test(line.trim()) ||
-    /^>\s?/.test(line.trim()) ||
-    /^!\[[^\]]*\]\(https?:\/\/[^)\s]+\)\s*$/.test(line.trim()) ||
-    /^(\*\s*){3,}$|^(-\s*){3,}$|^(_\s*){3,}$/.test(line.trim()) ||
-    (line.includes("|") && line.trim().startsWith("|"));
-
-  let i = 0;
-  while (i < lines.length) {
-    const raw = lines[i];
-    const trimmed = raw.trim();
+  lines.forEach((line, index) => {
+    const trimmed = line.trim();
 
     if (!trimmed) {
-      i++;
-      continue;
+      flushList();
+      return;
     }
 
-    // Fenced code blocks, including Mermaid diagrams.
-    if (trimmed.startsWith("```")) {
-      const language = trimmed.slice(3).trim().toLowerCase();
-      const codeLines = [];
-      i++;
-      while (i < lines.length && !lines[i].trim().startsWith("```")) {
-        codeLines.push(lines[i]);
-        i++;
-      }
-      if (i < lines.length) i++;
-      const code = codeLines.join("\n").trim();
-      if (language === "mermaid") {
-        elements.push(<MermaidDiagram key={`mermaid-${i}`} code={code} darkMode={darkMode} />);
-      } else {
-        elements.push(
-          <pre
-            key={`code-${i}`}
-            style={{
-              whiteSpace: "pre-wrap",
-              overflowX: "auto",
-              padding: "14px",
-              borderRadius: "10px",
-              background: mutedBg,
-              color: textColor,
-              border: `1px solid ${borderColor}`,
-              fontSize: "13px",
-              lineHeight: 1.6
-            }}
-          >
-            <code>{code}</code>
-          </pre>
-        );
-      }
-      continue;
+    const bullet = trimmed.match(/^[-*•]\s+(.+)/);
+    const numbered = trimmed.match(/^\d+[.)]\s+(.+)/);
+
+    if (bullet || numbered) {
+      const currentType = numbered ? "number" : "bullet";
+
+      if (listType && listType !== currentType) flushList();
+
+      listType = currentType;
+      listItems.push((bullet || numbered)[1]);
+      return;
     }
 
-    // Markdown headings.
+    flushList();
+
     const heading = trimmed.match(/^(#{1,3})\s+(.+)/);
+
     if (heading) {
       const level = heading[1].length;
-      const HeadingTag = level === 1 ? "h2" : level === 2 ? "h3" : "h4";
+      const HeadingTag =
+        level === 1 ? "h2" : level === 2 ? "h3" : "h4";
+
       elements.push(
         <HeadingTag
-          key={`heading-${i}`}
-          dir={isArabic(heading[2]) ? "rtl" : "auto"}
+          key={index}
           style={{
-            color: headingColor,
-            margin: level === 1 ? "22px 0 10px" : "17px 0 8px",
+            color: "#1e40af",
+            margin: "18px 0 8px",
             fontSize: level === 1 ? "21px" : level === 2 ? "18px" : "16px",
             lineHeight: 1.5
           }}
         >
-          {formatInline(heading[2], darkMode)}
+          {formatInline(heading[2])}
         </HeadingTag>
       );
-      i++;
-      continue;
+      return;
     }
 
-    // Horizontal divider.
-    if (/^(\*\s*){3,}$|^(-\s*){3,}$|^(_\s*){3,}$/.test(trimmed)) {
-      elements.push(
-        <hr key={`hr-${i}`} style={{ border: 0, borderTop: `1px solid ${borderColor}`, margin: "18px 0" }} />
-      );
-      i++;
-      continue;
-    }
+    const arabic = isArabic(trimmed);
 
-    // Standalone educational image.
-    const imageMatch = trimmed.match(/^!\[([^\]]*)\]\((https?:\/\/[^)\s]+)\)$/);
-    if (imageMatch) {
-      const imageUrl = safeHttpUrl(imageMatch[2]);
-      if (imageUrl) {
-        elements.push(
-          <figure
-            key={`image-${i}`}
-            style={{
-              margin: "14px 0 18px",
-              padding: "10px",
-              borderRadius: "12px",
-              background: darkMode ? "#0f172a" : "#ffffff",
-              border: `1px solid ${borderColor}`
-            }}
-          >
-            <img
-              src={imageUrl}
-              alt={imageMatch[1] || "Medical educational illustration"}
-              loading="lazy"
-              referrerPolicy="no-referrer"
-              style={{
-                display: "block",
-                width: "100%",
-                maxHeight: "430px",
-                objectFit: "contain",
-                borderRadius: "8px",
-                background: "#ffffff"
-              }}
-            />
-            {imageMatch[1] && (
-              <figcaption style={{ color: textColor, fontSize: "13px", marginTop: "8px", textAlign: "center" }}>
-                {imageMatch[1]}
-              </figcaption>
-            )}
-          </figure>
-        );
-      }
-      i++;
-      continue;
-    }
-
-    // Markdown tables.
-    if (trimmed.includes("|") && (trimmed.startsWith("|") || (i + 1 < lines.length && isTableSeparator(lines[i + 1])))) {
-      const tableLines = [];
-      while (i < lines.length && lines[i].trim().includes("|")) {
-        tableLines.push(lines[i].trim());
-        i++;
-      }
-      const rows = tableLines.filter(line => !isTableSeparator(line)).map(tableCells);
-      if (rows.length) {
-        const headers = rows[0];
-        elements.push(
-          <div key={`table-${i}`} style={{ overflowX: "auto", margin: "12px 0 18px", border: `1px solid ${borderColor}`, borderRadius: "10px" }}>
-            <table style={{ width: "100%", borderCollapse: "collapse", color: textColor, fontSize: "13px", minWidth: "360px" }}>
-              <thead>
-                <tr style={{ background: mutedBg }}>
-                  {headers.map((cell, index) => (
-                    <th key={index} style={{ textAlign: isArabic(cell) ? "right" : "left", padding: "10px", borderBottom: `1px solid ${borderColor}` }}>
-                      {formatInline(cell, darkMode)}
-                    </th>
-                  ))}
-                </tr>
-              </thead>
-              <tbody>
-                {rows.slice(1).map((row, rowIndex) => (
-                  <tr key={rowIndex}>
-                    {headers.map((_, cellIndex) => (
-                      <td key={cellIndex} style={{ padding: "9px 10px", verticalAlign: "top", borderTop: `1px solid ${borderColor}`, lineHeight: 1.65 }}>
-                        {formatInline(row[cellIndex] || "", darkMode)}
-                      </td>
-                    ))}
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        );
-      }
-      continue;
-    }
-
-    // Blockquotes.
-    if (trimmed.startsWith(">")) {
-      const quoteLines = [];
-      while (i < lines.length && lines[i].trim().startsWith(">")) {
-        quoteLines.push(lines[i].trim().replace(/^>\s?/, ""));
-        i++;
-      }
-      elements.push(
-        <blockquote
-          key={`quote-${i}`}
-          dir={isArabic(quoteLines.join(" ")) ? "rtl" : "auto"}
-          style={{
-            margin: "10px 0 16px",
-            padding: "10px 14px",
-            borderInlineStart: "3px solid #3b82f6",
-            background: mutedBg,
-            borderRadius: "8px",
-            color: textColor,
-            lineHeight: 1.8
-          }}
-        >
-          {formatInline(quoteLines.join(" "), darkMode)}
-        </blockquote>
-      );
-      continue;
-    }
-
-    // Ordered and unordered lists.
-    const bullet = trimmed.match(/^[-*•]\s+(.+)/);
-    const numbered = trimmed.match(/^\d+[.)]\s+(.+)/);
-    if (bullet || numbered) {
-      const ordered = Boolean(numbered);
-      const items = [];
-      while (i < lines.length) {
-        const current = lines[i].trim();
-        const match = ordered ? current.match(/^\d+[.)]\s+(.+)/) : current.match(/^[-*•]\s+(.+)/);
-        if (!match) break;
-        items.push(match[1]);
-        i++;
-      }
-      const ListTag = ordered ? "ol" : "ul";
-      elements.push(
-        <ListTag key={`list-${i}`} style={{ paddingInlineStart: "25px", margin: "8px 0 14px", lineHeight: 1.8, color: textColor }}>
-          {items.map((item, index) => (
-            <li key={index} style={{ paddingInlineStart: "4px", marginBottom: "3px" }}>
-              {formatInline(item, darkMode)}
-            </li>
-          ))}
-        </ListTag>
-      );
-      continue;
-    }
-
-    // Normal paragraph; join wrapped source lines until the next Markdown block.
-    const paragraph = [trimmed];
-    i++;
-    while (i < lines.length && lines[i].trim() && !isBlockStart(lines[i])) {
-      paragraph.push(lines[i].trim());
-      i++;
-    }
-    const paragraphText = paragraph.join(" ");
-    const arabic = isArabic(paragraphText);
     elements.push(
       <p
-        key={`paragraph-${i}`}
+        key={index}
         dir={arabic ? "rtl" : "auto"}
         style={{
           margin: "7px 0 12px",
           textAlign: arabic ? "right" : "left",
           lineHeight: 1.85,
-          fontSize: "15px",
-          color: textColor,
-          whiteSpace: "normal"
+          fontSize: "15px"
         }}
       >
-        {formatInline(paragraphText, darkMode)}
+        {formatInline(trimmed)}
       </p>
     );
-  }
+  });
+
+  flushList();
 
   return <div>{elements}</div>;
 }
@@ -404,6 +143,7 @@ async function compressImage(file) {
       MAX_DIMENSION / Math.max(bitmap.width, bitmap.height)
     );
 
+    // Keep small PNG images unchanged.
     if (scale === 1 && file.type === "image/png") {
       bitmap.close();
       return file;
@@ -421,12 +161,22 @@ async function compressImage(file) {
       return file;
     }
 
-    ctx.drawImage(bitmap, 0, 0, canvas.width, canvas.height);
+    ctx.drawImage(
+      bitmap,
+      0,
+      0,
+      canvas.width,
+      canvas.height
+    );
 
     bitmap.close();
 
+    // Preserve PNG format for diagrams and text.
+    // Convert other supported images to JPEG.
     const outputType =
-      file.type === "image/png" ? "image/png" : "image/jpeg";
+      file.type === "image/png"
+        ? "image/png"
+        : "image/jpeg";
 
     const blob = await new Promise((resolve) => {
       canvas.toBlob(
@@ -442,7 +192,9 @@ async function compressImage(file) {
 
     return new File(
       [blob],
-      outputType === "image/jpeg" ? "medmind-image.jpg" : file.name,
+      outputType === "image/jpeg"
+        ? "medmind-image.jpg"
+        : file.name,
       { type: outputType }
     );
 
@@ -482,16 +234,9 @@ export default function Tutor({ onBack, darkMode = false, setDarkMode }) {
   const galleryInputRef = useRef(null);
   const cameraInputRef = useRef(null);
 
+  // Test Worker temporarily
   const API_URL =
     "https://medmind-test.mohamedradey2hh0.workers.dev/";
-
-  const pageBg = darkMode ? "#0f172a" : "#f5f7fb";
-  const cardBg = darkMode ? "#1e293b" : "#ffffff";
-  const primaryText = darkMode ? "#f1f5f9" : "#172554";
-  const secondaryText = darkMode ? "#cbd5e1" : "#64748b";
-  const borderColor = darkMode ? "#334155" : "#e2e8f0";
-  const inputBg = darkMode ? "#0f172a" : "#ffffff";
-  const inputText = darkMode ? "#f1f5f9" : "#1e293b";
 
   function scrollToNewQuestion() {
     setTimeout(() => {
@@ -641,7 +386,10 @@ export default function Tutor({ onBack, darkMode = false, setDarkMode }) {
       let imageMimeType = null;
 
       if (imageForRequest) {
-        const optimizedImage = await compressImage(imageForRequest.file);
+        // Compress automatically before uploading.
+        const optimizedImage = await compressImage(
+          imageForRequest.file
+        );
 
         imageData = await fileToBase64(optimizedImage);
         imageMimeType = optimizedImage.type;
@@ -805,10 +553,10 @@ export default function Tutor({ onBack, darkMode = false, setDarkMode }) {
       }}
       style={{
         minHeight: "100vh",
-        background: pageBg,
+        background: "#f5f7fb",
         padding: "25px 16px",
         fontFamily: "Cairo, sans-serif",
-        color: primaryText
+        color: "#172554"
       }}
     >
       {textSelection && (
@@ -851,7 +599,6 @@ export default function Tutor({ onBack, darkMode = false, setDarkMode }) {
           >
             <ArrowLeft size={17} style={{ verticalAlign: "middle" }} /> Back
           </button>
-
           <button
             type="button"
             className="theme-toggle tutor-theme-toggle"
@@ -866,13 +613,10 @@ export default function Tutor({ onBack, darkMode = false, setDarkMode }) {
 
         <div
           style={{
-            background: cardBg,
+            background: "white",
             padding: "25px",
             borderRadius: "18px",
-            boxShadow: darkMode
-              ? "0 5px 25px #00000030"
-              : "0 5px 25px #00000008",
-            color: primaryText
+            boxShadow: "0 5px 25px #00000008"
           }}
         >
           <div
@@ -889,7 +633,7 @@ export default function Tutor({ onBack, darkMode = false, setDarkMode }) {
             </h1>
           </div>
 
-          <p style={{ color: secondaryText, lineHeight: 1.6 }}>
+          <p style={{ color: "#64748b", lineHeight: 1.6 }}>
             Your intelligent medical learning companion.
             Ask questions and learn in your own way.
           </p>
@@ -899,8 +643,7 @@ export default function Tutor({ onBack, darkMode = false, setDarkMode }) {
               style={{
                 display: "block",
                 marginBottom: "12px",
-                fontWeight: "bold",
-                color: primaryText
+                fontWeight: "bold"
               }}
             >
               How would you like the explanation?
@@ -913,57 +656,73 @@ export default function Tutor({ onBack, darkMode = false, setDarkMode }) {
                 gap: "12px"
               }}
             >
-              {[
-                {
-                  id: "quick",
-                  icon: <Zap size={19} color="#2563eb" />,
-                  title: "Quick Answer",
-                  description: "Short, direct answers with key points."
-                },
-                {
-                  id: "deep",
-                  icon: <BookOpen size={19} color="#2563eb" />,
-                  title: "Deep Explanation",
-                  description: "Step-by-step explanations, WHY, and clinical links."
-                }
-              ].map((item) => (
-                <button
-                  key={item.id}
-                  type="button"
-                  onClick={() => setDepth(item.id)}
-                  style={{
-                    padding: "16px",
-                    borderRadius: "12px",
-                    border: depth === item.id
-                      ? "2px solid #2563eb"
-                      : `1px solid ${borderColor}`,
-                    background: depth === item.id
-                      ? darkMode ? "#1e3a5f" : "#eff6ff"
-                      : inputBg,
-                    color: darkMode ? "#e2e8f0" : "#1e3a8a",
-                    cursor: "pointer",
-                    textAlign: "left"
-                  }}
-                >
-                  <div style={{
-                    display: "flex",
-                    alignItems: "center",
-                    gap: "8px",
-                    fontWeight: "bold"
-                  }}>
-                    {item.icon}
-                    {item.title}
-                  </div>
+              <button
+                type="button"
+                onClick={() => setDepth("quick")}
+                style={{
+                  padding: "16px",
+                  borderRadius: "12px",
+                  border: depth === "quick"
+                    ? "2px solid #2563eb"
+                    : "1px solid #dbe3ef",
+                  background: depth === "quick" ? "#eff6ff" : "white",
+                  color: "#1e3a8a",
+                  cursor: "pointer",
+                  textAlign: "left"
+                }}
+              >
+                <div style={{
+                  display: "flex",
+                  alignItems: "center",
+                  gap: "8px",
+                  fontWeight: "bold"
+                }}>
+                  <Zap size={19} color="#2563eb" />
+                  Quick Answer
+                </div>
 
-                  <div style={{
-                    marginTop: "7px",
-                    fontSize: "13px",
-                    color: secondaryText
-                  }}>
-                    {item.description}
-                  </div>
-                </button>
-              ))}
+                <div style={{
+                  marginTop: "7px",
+                  fontSize: "13px",
+                  color: "#64748b"
+                }}>
+                  Short, direct answers with key points.
+                </div>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => setDepth("deep")}
+                style={{
+                  padding: "16px",
+                  border: depth === "deep"
+                    ? "2px solid #2563eb"
+                    : "1px solid #dbe3ef",
+                  borderRadius: "12px",
+                  background: depth === "deep" ? "#eff6ff" : "white",
+                  color: "#1e3a8a",
+                  cursor: "pointer",
+                  textAlign: "left"
+                }}
+              >
+                <div style={{
+                  display: "flex",
+                  alignItems: "center",
+                  gap: "8px",
+                  fontWeight: "bold"
+                }}>
+                  <BookOpen size={19} color="#2563eb" />
+                  Deep Explanation
+                </div>
+
+                <div style={{
+                  marginTop: "7px",
+                  fontSize: "13px",
+                  color: "#64748b"
+                }}>
+                  Step-by-step explanations, WHY, and clinical links.
+                </div>
+              </button>
             </div>
           </div>
 
@@ -981,7 +740,7 @@ export default function Tutor({ onBack, darkMode = false, setDarkMode }) {
                 style={{
                   textAlign: "center",
                   padding: "35px 10px",
-                  color: secondaryText
+                  color: "#64748b"
                 }}
               >
                 <Brain size={38} color="#93c5fd" />
@@ -995,17 +754,13 @@ export default function Tutor({ onBack, darkMode = false, setDarkMode }) {
                 ref={index === latestUserIndex ? questionStartRef : null}
                 style={{
                   alignSelf: message.role === "user" ? "flex-end" : "stretch",
-                  background: message.role === "user"
-                    ? "#2563eb"
-                    : darkMode ? "#1e293b" : "#f8fafc",
-                  color: message.role === "user"
-                    ? "#ffffff"
-                    : darkMode ? "#f1f5f9" : "#1e293b",
+                  background: message.role === "user" ? "#2563eb" : "#f8fafc",
+                  color: message.role === "user" ? "white" : "#1e293b",
                   padding: "14px 17px",
                   borderRadius: "14px",
                   maxWidth: message.role === "user" ? "90%" : "100%",
                   border: message.role === "assistant"
-                    ? `1px solid ${borderColor}`
+                    ? "1px solid #e2e8f0"
                     : "none",
                   lineHeight: 1.7,
                   overflowWrap: "anywhere",
@@ -1040,10 +795,7 @@ export default function Tutor({ onBack, darkMode = false, setDarkMode }) {
 
                 {message.role === "assistant" ? (
                   <>
-                    <FormattedAnswer
-                      text={message.text}
-                      darkMode={darkMode}
-                    />
+                    <FormattedAnswer text={message.text} />
 
                     {loading &&
                       message.id &&
@@ -1100,10 +852,10 @@ export default function Tutor({ onBack, darkMode = false, setDarkMode }) {
                   position: "relative",
                   display: "inline-block",
                   marginBottom: "12px",
-                  border: `1px solid ${borderColor}`,
+                  border: "1px solid #dbe3ef",
                   borderRadius: "12px",
                   padding: "7px",
-                  background: darkMode ? "#0f172a" : "#f8fafc"
+                  background: "#f8fafc"
                 }}
               >
                 <img
@@ -1142,7 +894,7 @@ export default function Tutor({ onBack, darkMode = false, setDarkMode }) {
 
                 <div style={{
                   fontSize: "12px",
-                  color: secondaryText,
+                  color: "#64748b",
                   marginTop: "5px"
                 }}>
                   {selectedImage.name}
@@ -1167,9 +919,6 @@ export default function Tutor({ onBack, darkMode = false, setDarkMode }) {
               rows={4}
               style={{
                 ...fieldStyle,
-                background: inputBg,
-                color: inputText,
-                border: `1px solid ${borderColor}`,
                 resize: "vertical",
                 width: "100%",
                 boxSizing: "border-box",
@@ -1249,7 +998,7 @@ export default function Tutor({ onBack, darkMode = false, setDarkMode }) {
 
           <p
             style={{
-              color: darkMode ? "#94a3b8" : "#94a3b8",
+              color: "#94a3b8",
               fontSize: "12px",
               marginTop: "20px",
               lineHeight: 1.5
@@ -1265,11 +1014,6 @@ export default function Tutor({ onBack, darkMode = false, setDarkMode }) {
         @keyframes medmindBlink {
           0%, 100% { opacity: 1; }
           50% { opacity: 0; }
-        }
-
-        #medmind-tutor textarea::placeholder {
-          color: ${darkMode ? "#94a3b8" : "#94a3b8"};
-          opacity: 1;
         }
       `}</style>
     </div>
