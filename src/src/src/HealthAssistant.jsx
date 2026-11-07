@@ -1,689 +1,130 @@
+import React, { useEffect, useRef, useState } from "react";
+import { ArrowRight, HeartPulse, Send, RotateCcw, AlertTriangle, UserRound, Bot, Loader2 } from "lucide-react";
 
-import React, { useState, useRef, useEffect } from "react";
-import {
-  ArrowLeft,
-  HeartPulse,
-  Send,
-  Loader2,
-  Moon,
-  Sun,
-  ShieldCheck,
-  AlertTriangle,
-  MessageCircle,
-  Trash2
-} from "lucide-react";
+const API_URL = "https://medmind-test.mohamedradey2hh0.workers.dev/";
 
-const API_URL =
-  "https://medmind-test.mohamedradey2hh0.workers.dev/";
-
-const STORAGE_KEY = "medmind-health-chat-v1";
-
-const INITIAL_MESSAGES = [
-  {
-    role: "assistant",
-    text: "أهلاً بيك في MedMind Health Assistant ❤️\n\nأنا هنا عشان أساعدك تفهم الأعراض وتعرف تتصرف إزاي بشكل آمن.\n\nاحكيلي، إيه المشكلة الصحية اللي بتواجهك؟"
+function parseFrame(frame) {
+  const lines = String(frame || "").split(/\r?\n/);
+  const eventName = lines.find(line => line.startsWith("event:"))?.slice(6).trim();
+  const data = lines.filter(line => line.startsWith("data:")).map(line => line.slice(5).trim()).join("\n");
+  if (!data || data === "[DONE]") return null;
+  let parsed;
+  try { parsed = JSON.parse(data); }
+  catch { throw new Error("وصل رد غير مفهوم من الخادم. حاول مرة أخرى."); }
+  if (eventName === "error" || parsed.event_type === "error" || parsed.error) {
+    throw new Error(typeof parsed.error === "string" ? parsed.error : parsed.error?.message || "حدث خطأ أثناء توليد الرد.");
   }
-];
-
-// Load previous conversation from browser storage.
-function loadSavedMessages() {
-  try {
-    const saved = localStorage.getItem(STORAGE_KEY);
-
-    if (!saved) return INITIAL_MESSAGES;
-
-    const parsed = JSON.parse(saved);
-
-    if (!Array.isArray(parsed) || parsed.length === 0) {
-      return INITIAL_MESSAGES;
-    }
-
-    return parsed
-      .filter(message =>
-        message &&
-        ["user", "assistant"].includes(message.role) &&
-        typeof message.text === "string"
-      )
-      .slice(-200);
-
-  } catch (error) {
-    console.warn("Could not load saved conversation:", error);
-    return INITIAL_MESSAGES;
-  }
+  return typeof parsed.text === "string" ? parsed.text : "";
 }
 
-export default function HealthAssistant({
-  onBack,
-  darkMode = false,
-  setDarkMode
-}) {
-  const [messages, setMessages] = useState(loadSavedMessages);
-
-  const [question, setQuestion] = useState("");
+export default function HealthAssistant({ onBack, darkMode = false, setDarkMode }) {
+  const [messages, setMessages] = useState([]);
+  const [input, setInput] = useState("");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
+  const endRef = useRef(null);
+  const abortRef = useRef(null);
 
-  const bottomRef = useRef(null);
-  const textareaRef = useRef(null);
+  const colors = darkMode
+    ? { page: "#0b1220", card: "#111c2e", text: "#e5edf7", muted: "#9aabc0", border: "#26364d", soft: "#17263b", user: "#123b3b" }
+    : { page: "#f5f8fb", card: "#ffffff", text: "#172b4d", muted: "#64748b", border: "#e2e8f0", soft: "#f1f5f9", user: "#e0f2f1" };
 
-  const colors = {
-    page: darkMode ? "#0b1220" : "#f5f7fb",
-    card: darkMode ? "#151f30" : "#ffffff",
-    text: darkMode ? "#e5edf7" : "#172b4d",
-    muted: darkMode ? "#a8b6c9" : "#64748b",
-    border: darkMode ? "#29364a" : "#e5eaf0",
-    soft: darkMode ? "#1e293b" : "#f1f5f9",
-    assistant: darkMode ? "#1e293b" : "#f8fafc"
-  };
-
-  // Automatically save every conversation update.
-  useEffect(() => {
-    try {
-      localStorage.setItem(
-        STORAGE_KEY,
-        JSON.stringify(messages)
-      );
-    } catch (error) {
-      console.warn("Could not save conversation:", error);
-      setError("تعذر حفظ المحادثة على هذا الجهاز. تأكد من مساحة التخزين.");
-    }
-  }, [messages]);
-
-  // Scroll to latest message.
-  useEffect(() => {
-    bottomRef.current?.scrollIntoView({
-      behavior: "smooth"
-    });
-  }, [messages, loading]);
-
-  // Start a new conversation.
-  function clearConversation() {
-    if (loading) return;
-
-    const confirmed = window.confirm(
-      "هل أنت متأكد إنك عايز تمسح المحادثة المحفوظة وتبدأ من جديد؟"
-    );
-
-    if (!confirmed) return;
-
-    setMessages(INITIAL_MESSAGES);
-    setQuestion("");
-    setError("");
-
-    try {
-      localStorage.removeItem(STORAGE_KEY);
-    } catch (error) {
-      console.warn("Could not clear saved conversation:", error);
-    }
-  }
+  useEffect(() => { endRef.current?.scrollIntoView({ behavior: "smooth", block: "end" }); }, [messages, loading]);
+  useEffect(() => () => abortRef.current?.abort(), []);
 
   async function sendMessage(e) {
-    e.preventDefault();
-
-    if (!question.trim() || loading) return;
-
-    const currentQuestion = question.trim();
-
-    // Include previous messages as context for Gemini.
-    const history = messages.map(message => ({
-      role: message.role,
-      text: message.text
-    }));
-
-    const assistantId =
-      `health-${Date.now()}-${Math.random()}`;
-
-    setMessages(prev => [
-      ...prev,
-      {
-        role: "user",
-        text: currentQuestion
-      },
-      {
-        id: assistantId,
-        role: "assistant",
-        text: ""
-      }
-    ]);
-
-    setQuestion("");
-    setLoading(true);
-    setError("");
-
+    e?.preventDefault();
+    const question = input.trim();
+    if (!question || loading) return;
+    const history = messages.map(m => ({ role: m.role, text: m.text }));
+    const assistantId = `health-${Date.now()}`;
+    const controller = new AbortController();
+    abortRef.current = controller;
+    setInput(""); setError(""); setLoading(true);
+    setMessages(prev => [...prev, { role: "user", text: question }, { id: assistantId, role: "assistant", text: "" }]);
     try {
       const response = await fetch(API_URL, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json"
-        },
-        body: JSON.stringify({
-          mode: "health_assistant",
-          question: currentQuestion,
-          history
-        })
+        method: "POST", signal: controller.signal,
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ mode: "health_assistant", question, history })
       });
-
       if (!response.ok) {
-        let message = "حدث خطأ أثناء الاتصال بالمساعد.";
-
-        try {
-          const data = await response.json();
-          message = data.error || message;
-        } catch {}
-
+        let message = "تعذر الاتصال بالمساعد الصحي.";
+        try { const data = await response.json(); message = data.error || message; } catch {}
         throw new Error(message);
       }
-
-      if (!response.body) {
-        throw new Error("الاتصال لا يدعم استقبال الرد.");
-      }
-
+      if (!response.body) throw new Error("المتصفح لا يدعم استقبال الرد المتدفق.");
       const reader = response.body.getReader();
       const decoder = new TextDecoder();
-
       let buffer = "";
-      let receivedText = "";
-
-      function processFrame(frame) {
-        const lines = frame.split(/\r?\n/);
-
-        const eventName = lines
-          .find(line => line.startsWith("event:"))
-          ?.slice(6)
-          .trim();
-
-        const dataLines = lines
-          .filter(line => line.startsWith("data:"))
-          .map(line => line.slice(5).trim());
-
-        if (!dataLines.length) return;
-
-        const rawData = dataLines.join("\n");
-
-        if (rawData === "[DONE]") return;
-
-        const data = JSON.parse(rawData);
-
-        if (eventName === "error" || data.error) {
-          throw new Error(
-            data.error || "تعذر إكمال الرد."
-          );
-        }
-
-        if (typeof data.text === "string") {
-          receivedText += data.text;
-
-          setMessages(prev =>
-            prev.map(message =>
-              message.id === assistantId
-                ? {
-                    ...message,
-                    text: receivedText
-                  }
-                : message
-            )
-          );
-        }
-      }
-
+      let received = "";
       while (true) {
         const { value, done } = await reader.read();
-
         if (done) break;
-
-        buffer += decoder.decode(value, {
-          stream: true
-        });
-
+        buffer += decoder.decode(value, { stream: true });
         const frames = buffer.split(/\r?\n\r?\n/);
-
         buffer = frames.pop() || "";
-
         for (const frame of frames) {
-          processFrame(frame);
+          const piece = parseFrame(frame);
+          if (piece) {
+            received += piece;
+            setMessages(prev => prev.map(m => m.id === assistantId ? { ...m, text: received } : m));
+          }
         }
       }
-
-      buffer += decoder.decode();
-
       if (buffer.trim()) {
-        processFrame(buffer);
+        const piece = parseFrame(buffer);
+        if (piece) received += piece;
       }
-
-      if (!receivedText.trim()) {
-        throw new Error(
-          "لم يصل رد من المساعد. حاول مرة أخرى."
-        );
-      }
-
+      if (received) setMessages(prev => prev.map(m => m.id === assistantId ? { ...m, text: received } : m));
+      else throw new Error("لم يصل رد مكتمل. أعد إرسال رسالتك.");
     } catch (err) {
-      setError(
-        err.message || "حدث خطأ في الاتصال."
-      );
-
-      setMessages(prev =>
-        prev.filter(
-          message =>
-            message.id !== assistantId ||
-            message.text.trim()
-        )
-      );
-
-    } finally {
-      setLoading(false);
-      textareaRef.current?.focus();
-    }
+      if (err.name !== "AbortError") {
+        setError(err.message || "حدث خطأ. حاول مرة أخرى.");
+        setMessages(prev => prev.filter(m => m.id !== assistantId));
+      }
+    } finally { setLoading(false); abortRef.current = null; }
   }
 
+  function resetChat() {
+    abortRef.current?.abort();
+    setMessages([]); setInput(""); setError(""); setLoading(false);
+  }
+
+  const button = { border: `1px solid ${colors.border}`, borderRadius: 12, padding: "10px 14px", background: colors.card, color: colors.text, cursor: "pointer", fontFamily: "inherit", fontWeight: 700 };
+
   return (
-    <div
-      dir="rtl"
-      style={{
-        minHeight: "100vh",
-        background: colors.page,
-        color: colors.text,
-        padding: "20px 14px 35px",
-        fontFamily: "Cairo, sans-serif"
-      }}
-    >
-      <div style={{
-        maxWidth: 850,
-        margin: "auto"
-      }}>
-
-        {/* Top Navigation */}
-
-        <div style={{
-          display: "flex",
-          justifyContent: "space-between",
-          alignItems: "center",
-          gap: 10,
-          marginBottom: 20
-        }}>
-
-          <button
-            onClick={onBack}
-            style={navButton(colors)}
-          >
-            <ArrowLeft size={17} />
-            الرئيسية
-          </button>
-
-          <button
-            onClick={() =>
-              setDarkMode?.(current => !current)
-            }
-            style={navButton(colors)}
-          >
-            {darkMode
-              ? <Sun size={18} />
-              : <Moon size={18} />
-            }
-          </button>
+    <div dir="rtl" style={{ minHeight: "100vh", background: colors.page, color: colors.text, padding: "20px 14px 40px", fontFamily: "inherit" }}>
+      <div style={{ maxWidth: 900, margin: "0 auto" }}>
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 10, marginBottom: 16, flexWrap: "wrap" }}>
+          <button onClick={onBack} style={button}><ArrowRight size={17} style={{ verticalAlign: "middle", marginLeft: 6 }} /> رجوع للرئيسية</button>
+          <button onClick={resetChat} style={button}><RotateCcw size={16} style={{ verticalAlign: "middle", marginLeft: 6 }} /> محادثة جديدة</button>
         </div>
-
-        {/* Assistant Header */}
-
-        <div style={{
-          background: "linear-gradient(120deg,#087e78,#075b63)",
-          color: "white",
-          padding: 25,
-          borderRadius: 18,
-          marginBottom: 16
-        }}>
-
-          <div style={{
-            display: "flex",
-            alignItems: "center",
-            gap: 12
-          }}>
-            <HeartPulse size={36} />
-
-            <div>
-              <h1 style={{
-                fontSize: 23,
-                margin: 0,
-                fontWeight: 900
-              }}>
-                MedMind Health Assistant
-              </h1>
-
-              <p style={{
-                color: "#d9f3ef",
-                fontSize: 13,
-                marginTop: 5
-              }}>
-                مساعدك الصحي الذكي
-              </p>
-            </div>
+        <section style={{ background: colors.card, border: `1px solid ${colors.border}`, borderRadius: 20, padding: 20, marginBottom: 14 }}>
+          <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
+            <div style={{ width: 52, height: 52, display: "grid", placeItems: "center", borderRadius: 16, background: darkMode ? "#123b3b" : "#ccfbf1", color: "#0d9488" }}><HeartPulse size={28} /></div>
+            <div><div style={{ color: "#0d9488", fontSize: 12, fontWeight: 800, letterSpacing: 1 }}>NEBRAS · HEALTH ASSISTANT</div><h1 style={{ margin: "5px 0", fontSize: 23 }}>المساعد الصحي الذكي</h1><p style={{ margin: 0, color: colors.muted, fontSize: 13 }}>اكتب ما تشعر به وسأساعدك على فهم الأعراض والخطوات الآمنة التالية.</p></div>
           </div>
-
-          <p style={{
-            marginTop: 17,
-            fontSize: 14,
-            lineHeight: 1.9,
-            color: "#ecfdf5"
-          }}>
-            احكي عن مشكلتك الصحية، وسأساعدك على فهم
-            الأعراض وتحديد الخطوة المناسبة.
-          </p>
-        </div>
-
-        {/* Safety Notice */}
-
-        <div style={{
-          background: darkMode ? "#332b19" : "#fffbeb",
-          border: "1px solid #d97706",
-          borderRadius: 12,
-          padding: 13,
-          display: "flex",
-          gap: 10,
-          marginBottom: 16,
-          fontSize: 12,
-          lineHeight: 1.8
-        }}>
-          <AlertTriangle
-            size={20}
-            color="#d97706"
-            style={{ flexShrink: 0 }}
-          />
-
-          <div>
-            الخدمة تقدم معلومات وتوجيهًا صحيًا مبدئيًا،
-            ولا تغني عن الكشف الطبي. في حالة الأعراض الطارئة
-            اطلب المساعدة الطبية فورًا.
-          </div>
-        </div>
-
-        {/* Chat */}
-
-        <div style={{
-          background: colors.card,
-          border: `1px solid ${colors.border}`,
-          borderRadius: 18,
-          padding: 18,
-          boxShadow: darkMode
-            ? "0 5px 20px #00000025"
-            : "0 5px 20px #00000006"
-        }}>
-
-          {/* Chat Header */}
-
-          <div style={{
-            display: "flex",
-            justifyContent: "space-between",
-            alignItems: "center",
-            gap: 10,
-            paddingBottom: 15,
-            borderBottom: `1px solid ${colors.border}`,
-            marginBottom: 17
-          }}>
-
-            <div style={{
-              display: "flex",
-              alignItems: "center",
-              gap: 10
-            }}>
-              <MessageCircle
-                size={22}
-                color="#0D9488"
-              />
-
-              <div>
-                <strong>المحادثة الصحية</strong>
-
-                <div style={{
-                  color: colors.muted,
-                  fontSize: 11
-                }}>
-                  المحادثة محفوظة على جهازك
-                </div>
+        </section>
+        <div style={{ background: colors.card, border: `1px solid ${colors.border}`, borderRadius: 18, padding: 16, minHeight: 360 }}>
+          {messages.length === 0 ? <div style={{ maxWidth: 600, margin: "42px auto", textAlign: "center", color: colors.muted, lineHeight: 2 }}><HeartPulse size={38} color="#0d9488" /><h3 style={{ color: colors.text, marginBottom: 6 }}>كيف يمكنني مساعدتك؟</h3><p>صف الأعراض، ومتى بدأت، وما الذي يزيدها أو يخففها. سأطرح أسئلة توضيحية عند الحاجة.</p></div> : messages.map((m, i) => (
+            <div key={m.id || i} style={{ display: "flex", justifyContent: m.role === "user" ? "flex-start" : "flex-end", margin: "12px 0" }}>
+              <div style={{ maxWidth: "88%", padding: "12px 15px", borderRadius: 15, background: m.role === "user" ? colors.user : colors.soft, border: `1px solid ${colors.border}`, lineHeight: 1.9, whiteSpace: "pre-wrap", overflowWrap: "anywhere" }}>
+                <div style={{ fontSize: 11, fontWeight: 800, color: colors.muted, marginBottom: 5 }}>{m.role === "user" ? <><UserRound size={13} /> أنت</> : <><Bot size={13} /> نَبْراس</>}</div>
+                {m.text || (loading && i === messages.length - 1 ? "جاري التفكير..." : "")}
               </div>
             </div>
-
-            <button
-              type="button"
-              onClick={clearConversation}
-              disabled={loading}
-              title="مسح المحادثة وبدء محادثة جديدة"
-              aria-label="مسح المحادثة"
-              style={{
-                display: "flex",
-                alignItems: "center",
-                gap: 6,
-                padding: "9px 11px",
-                borderRadius: 10,
-                border: `1px solid ${colors.border}`,
-                background: colors.soft,
-                color: "#EF4444",
-                cursor: loading ? "not-allowed" : "pointer",
-                opacity: loading ? 0.5 : 1,
-                fontFamily: "inherit",
-                fontSize: 12
-              }}
-            >
-              <Trash2 size={16} />
-              محادثة جديدة
-            </button>
-          </div>
-
-          {/* Messages */}
-
-          <div style={{
-            minHeight: 250,
-            maxHeight: 520,
-            overflowY: "auto",
-            display: "flex",
-            flexDirection: "column",
-            gap: 13
-          }}>
-
-            {messages.map((message, index) => {
-              if (
-                message.role === "assistant" &&
-                !message.text
-              ) {
-                return null;
-              }
-
-              return (
-                <div
-                  key={message.id || index}
-                  style={{
-                    alignSelf:
-                      message.role === "user"
-                        ? "flex-start"
-                        : "flex-end",
-
-                    maxWidth: "90%",
-
-                    background:
-                      message.role === "user"
-                        ? "#0D9488"
-                        : colors.assistant,
-
-                    color:
-                      message.role === "user"
-                        ? "white"
-                        : colors.text,
-
-                    border:
-                      message.role === "assistant"
-                        ? `1px solid ${colors.border}`
-                        : "none",
-
-                    padding: "12px 15px",
-                    borderRadius: 14,
-                    fontSize: 14,
-                    lineHeight: 2,
-                    whiteSpace: "pre-wrap",
-                    overflowWrap: "anywhere"
-                  }}
-                >
-                  <div style={{
-                    fontSize: 11,
-                    fontWeight: 800,
-                    marginBottom: 5,
-                    opacity: 0.8
-                  }}>
-                    {message.role === "user"
-                      ? "أنت"
-                      : "MedMind"
-                    }
-                  </div>
-
-                  {message.text}
-                </div>
-              );
-            })}
-
-            {loading && (
-              <div style={{
-                color: "#0D9488",
-                display: "flex",
-                alignItems: "center",
-                gap: 8,
-                fontSize: 13
-              }}>
-                <Loader2 size={18} />
-                MedMind يفكر...
-              </div>
-            )}
-
-            <div ref={bottomRef} />
-          </div>
-
-          {error && (
-            <div style={{
-              color: "#ef4444",
-              fontSize: 13,
-              marginTop: 12
-            }}>
-              {error}
-            </div>
-          )}
-
-          {/* Message Input */}
-
-          <form
-            onSubmit={sendMessage}
-            style={{
-              marginTop: 20,
-              borderTop: `1px solid ${colors.border}`,
-              paddingTop: 15
-            }}
-          >
-
-            <textarea
-              ref={textareaRef}
-              value={question}
-              onChange={e =>
-                setQuestion(e.target.value)
-              }
-              onKeyDown={e => {
-                if (
-                  e.key === "Enter" &&
-                  !e.shiftKey
-                ) {
-                  e.preventDefault();
-
-                  if (
-                    question.trim() &&
-                    !loading
-                  ) {
-                    e.currentTarget.form.requestSubmit();
-                  }
-                }
-              }}
-              placeholder="اكتب مشكلتك أو اسأل عن أعراضك..."
-              rows={3}
-              disabled={loading}
-              style={{
-                width: "100%",
-                boxSizing: "border-box",
-                resize: "vertical",
-                background: colors.soft,
-                color: colors.text,
-                border: `1px solid ${colors.border}`,
-                borderRadius: 12,
-                padding: 14,
-                outline: "none",
-                fontFamily: "inherit",
-                fontSize: 14,
-                lineHeight: 1.8
-              }}
-            />
-
-            <button
-              type="submit"
-              disabled={loading || !question.trim()}
-              style={{
-                marginTop: 12,
-                width: "100%",
-                background: "#0D9488",
-                color: "white",
-                border: "none",
-                borderRadius: 12,
-                padding: 14,
-                fontWeight: 800,
-                fontSize: 14,
-                cursor: "pointer",
-                opacity:
-                  loading || !question.trim()
-                    ? 0.55
-                    : 1,
-                display: "flex",
-                justifyContent: "center",
-                alignItems: "center",
-                gap: 9
-              }}
-            >
-              {loading
-                ? <Loader2 size={18} />
-                : <Send size={18} />
-              }
-
-              {loading
-                ? "جاري إرسال الرسالة..."
-                : "إرسال"
-              }
-            </button>
-          </form>
-
-          {/* Disclaimer */}
-
-          <div style={{
-            display: "flex",
-            alignItems: "center",
-            gap: 7,
-            marginTop: 17,
-            color: colors.muted,
-            fontSize: 11,
-            lineHeight: 1.8
-          }}>
-            <ShieldCheck size={17} />
-
-            المعلومات المقدمة هنا للتوعية والتوجيه
-            ولا تمثل تشخيصًا طبيًا مؤكدًا.
-          </div>
-
+          ))}
+          {loading && <div style={{ color: colors.muted, fontSize: 12, padding: 8 }}><Loader2 size={14} /> جاري إعداد الرد...</div>}
+          <div ref={endRef} />
         </div>
+        {error && <div role="alert" style={{ marginTop: 10, padding: 12, borderRadius: 12, background: darkMode ? "#3b2525" : "#fff1f2", color: darkMode ? "#fecdd3" : "#be123c" }}>{error}</div>}
+        <form onSubmit={sendMessage} style={{ display: "flex", gap: 9, marginTop: 12, alignItems: "stretch" }}>
+          <textarea value={input} onChange={e => setInput(e.target.value)} onKeyDown={e => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); sendMessage(e); } }} rows={2} placeholder="اكتب الأعراض أو سؤالك الصحي هنا..." style={{ flex: 1, resize: "vertical", minWidth: 0, border: `1px solid ${colors.border}`, borderRadius: 13, padding: 13, background: colors.card, color: colors.text, font: "inherit", lineHeight: 1.7 }} />
+          <button type="submit" disabled={!input.trim() || loading} style={{ ...button, background: "#0d9488", color: "white", border: 0, opacity: !input.trim() || loading ? .55 : 1 }} aria-label="إرسال"><Send size={19} /></button>
+        </form>
+        <div style={{ display: "flex", gap: 7, alignItems: "flex-start", marginTop: 12, color: colors.muted, fontSize: 11, lineHeight: 1.8 }}><AlertTriangle size={15} style={{ flexShrink: 0, marginTop: 3 }} /> هذا المساعد للتوجيه والتثقيف الصحي المبدئي، ولا يستبدل الكشف الطبي أو تشخيص الطبيب. في حالات صعوبة التنفس الشديدة أو ألم الصدر الشديد أو فقدان الوعي أو النزيف الشديد، اطلب الطوارئ فورًا.</div>
       </div>
     </div>
   );
-}
-
-function navButton(colors) {
-  return {
-    display: "flex",
-    alignItems: "center",
-    gap: 7,
-    padding: "10px 13px",
-    borderRadius: 10,
-    border: `1px solid ${colors.border}`,
-    background: colors.card,
-    color: colors.text,
-    cursor: "pointer",
-    fontFamily: "inherit"
-  };
 }
